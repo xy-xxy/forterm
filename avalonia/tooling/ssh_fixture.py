@@ -192,24 +192,50 @@ class Server(paramiko.ServerInterface):
   if name!='sftp' or os.getenv('FIXTURE_DENY_SFTP')=='1':return False
   with lock:counts['sftp']+=1
   return super().check_channel_subsystem_request(ch,name)
+# Windows has no permission bits, owners or directory handles: they are kept here, by path. FIXTURE_EMULATE=1 does so
+# elsewhere, to test this.
+emulate=os.name=='nt' or os.getenv('FIXTURE_EMULATE')=='1'
+modes={}
+def mode_key(path):return os.path.normcase(os.path.abspath(path))
+def attributes(st,path):
+ a=paramiko.SFTPAttributes.from_stat(st)
+ if emulate:
+  import stat as kinds
+  usual=0o777 if kinds.S_ISLNK(st.st_mode) else 0o755 if kinds.S_ISDIR(st.st_mode) else 0o644
+  a.st_mode=kinds.S_IFMT(st.st_mode)|modes.get(mode_key(path),usual);a.st_uid=a.st_gid=1000
+ return a
+def set_mode(path,mode,fd=None):
+ if emulate:modes[mode_key(path)]=mode&0o7777
+ elif fd is not None:os.fchmod(fd,mode&0o7777)
+ else:os.chmod(path,mode&0o7777)
+def moved(old,new):
+ if not emulate:return
+ a,b=mode_key(old),mode_key(new)
+ for k in [k for k in modes if k==b or k.startswith(b+os.sep)]:del modes[k]
+ for k in [k for k in modes if k==a or k.startswith(a+os.sep)]:modes[b+k[len(a):]]=modes.pop(k)
+def gone(path):
+ if emulate:modes.pop(mode_key(path),None)
 class Handle(paramiko.SFTPHandle):
- def stat(self):return paramiko.SFTPAttributes.from_stat(os.fstat(self.readfile.fileno()))
+ def stat(self):return attributes(os.fstat(self.readfile.fileno()),self.path)
  def chattr(self,attr):
   try:
-   if attr.st_mode is not None:os.fchmod(self.readfile.fileno(),attr.st_mode&0o7777)
+   if attr.st_mode is not None:set_mode(self.path,attr.st_mode,self.readfile.fileno())
    return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
 class DirectoryHandle(paramiko.SFTPHandle):
  def __init__(self,path):
-  super().__init__();self.fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
- def stat(self):return paramiko.SFTPAttributes.from_stat(os.fstat(self.fd))
+  super().__init__();self.path=path;self.fd=None
+  if emulate:os.listdir(path)
+  else:self.fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+ def stat(self):return attributes(os.stat(self.path) if self.fd is None else os.fstat(self.fd),self.path)
  def chattr(self,attr):
   try:
-   if attr.st_mode is not None:os.fchmod(self.fd,attr.st_mode&0o7777)
+   if attr.st_mode is not None:set_mode(self.path,attr.st_mode,self.fd)
    return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def close(self):
-  os.close(self.fd);return super().close()
+  if self.fd is not None:os.close(self.fd)
+  return super().close()
 class FixtureSFTPServer(paramiko.SFTPServer):
  def _open_folder(self,request,path):
   files=self.server.list_folder(path)
@@ -246,46 +272,51 @@ class Files(paramiko.SFTPServerInterface):
    # FIXTURE_LSTAT_LIST=1: readdir attributes describe links themselves, as OpenSSH's sftp-server does.
    info=os.lstat if os.getenv('FIXTURE_LSTAT_LIST')=='1' else os.stat
    for name in os.listdir(self.local(path)):
-    a=paramiko.SFTPAttributes.from_stat(info(self.local(path+'/'+name)));a.filename=name;result.append(a)
+    a=attributes(info(self.local(path+'/'+name)),self.local(path+'/'+name));a.filename=name;result.append(a)
    return result
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def stat(self,path):
-  try:return paramiko.SFTPAttributes.from_stat(os.stat(self.local(path)))
+  try:return attributes(os.stat(self.local(path)),self.local(path))
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def lstat(self,path):
   with lock:counts['lstats']+=1
   if os.getenv('FIXTURE_STAT_DELAY'):time.sleep(float(os.getenv('FIXTURE_STAT_DELAY')))
-  try:return paramiko.SFTPAttributes.from_stat(os.lstat(self.local(path)))
+  try:return attributes(os.lstat(self.local(path)),self.local(path))
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def open(self,path,flags,attr):
   with lock:counts['openModes'].append(attr.st_mode)
   try:
-   fd=os.open(self.local(path),flags,0o600);mode='r+b' if flags&os.O_RDWR else ('wb' if flags&os.O_WRONLY else 'rb');f=os.fdopen(fd,mode)
-   h=Handle(flags);h.readfile=f;h.writefile=f;return h
+   new=not os.path.exists(self.local(path));fd=os.open(self.local(path),flags,0o600)
+   if new:set_mode(self.local(path),0o600,fd)
+   mode='r+b' if flags&os.O_RDWR else ('wb' if flags&os.O_WRONLY else 'rb');f=os.fdopen(fd,mode)
+   h=Handle(flags);h.readfile=f;h.writefile=f;h.path=self.local(path);return h
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def mkdir(self,path,attr):
-  try:os.mkdir(self.local(path),((attr.st_mode or 0o700)&0o7777));return paramiko.SFTP_OK
+  try:
+   os.mkdir(self.local(path),((attr.st_mode or 0o700)&0o7777))
+   if emulate:set_mode(self.local(path),attr.st_mode or 0o700)
+   return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def rmdir(self,path):
-  try:os.rmdir(self.local(path));return paramiko.SFTP_OK
+  try:os.rmdir(self.local(path));gone(self.local(path));return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def remove(self,path):
-  try:os.unlink(self.local(path));return paramiko.SFTP_OK
+  try:os.unlink(self.local(path));gone(self.local(path));return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def chattr(self,path,attr):
   try:
-   if attr.st_mode is not None:os.chmod(self.local(path),attr.st_mode&0o7777)
+   if attr.st_mode is not None:set_mode(self.local(path),attr.st_mode)
    return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def posix_rename(self,old,new):
   try:
    if os.getenv('FIXTURE_COMMIT_DELAY'):time.sleep(float(os.getenv('FIXTURE_COMMIT_DELAY')))
-   os.replace(self.local(old),self.local(new));return paramiko.SFTP_OK
+   os.replace(self.local(old),self.local(new));moved(self.local(old),self.local(new));return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def rename(self,old,new):
   try:
    if os.path.exists(self.local(new)):return paramiko.SFTP_FAILURE
-   os.rename(self.local(old),self.local(new));return paramiko.SFTP_OK
+   os.rename(self.local(old),self.local(new));moved(self.local(old),self.local(new));return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
 listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(10)
 print(json.dumps({'port':listener.getsockname()[1],'fingerprint':key.fingerprint,'privateKeyPath':keypath}),flush=True)

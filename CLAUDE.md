@@ -80,6 +80,7 @@ python3 tooling/package-windows.py ...                             # NSIS instal
 - Studio editor find (`EditorFindViewModel`): patterns run with `NonBacktracking` and a time limit, on text whose CRLF is one character (`Lines`).
 - `StudioBackup`: a restore that is not marked as one's own must not switch on anything that sends, starts or lowers a guard; new preferences of that kind go into the untrusted list in `Plan`.
 - Studio monitor: everything parsed from a server is bounded in `MonitorProbe.Parse` (`MostKilobytes`, the limit in `D`). `MonitorFindings.Average` weights each reading by the time it covers. A failed reading ends refreshing by itself until the user asks (`RefreshByUserAsync`).
+- `ssh_fixture.py` keeps permission bits by path where there are none (Windows, or `FIXTURE_EMULATE=1` anywhere, which is how that path is tested on macOS). It must not use POSIX-only calls outside that switch.
 - `ssh_fixture.py`: `FIXTURE_HOLD=1` keeps the shell from reading until the command `release-shell`, `FIXTURE_WINDOW=n` sets its window, and `close-shell` ends the last shell that was opened.
 - `ssh_fixture.py` refuses every SSH `env` request unless `FIXTURE_ACCEPT_ENV=NAME,NAME` lists it. Its `stats` reply includes `env` (each request and whether it came before the shell) and `negotiated` (the server-side kex, host key and cipher).
 - In a sandboxed shell, `TMPDIR` may be empty or too long. .NET named mutexes and pipes on macOS need a short `TMPDIR`, so run tests with `TMPDIR=$(getconf DARWIN_USER_TEMP_DIR)`.
