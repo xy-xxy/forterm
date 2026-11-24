@@ -54,6 +54,7 @@ python3 tooling/package-windows.py ...                             # NSIS instal
   - Every member added to `IStudioInteraction` also needs a scripted version in `ScriptedInteraction`.
   - A module initializer in `TestSupport.cs` restricts the library's TCP latency probe to loopback, so library tests that use documentation addresses (198.51.100.x, 203.0.113.x) open no sockets.
   - Only `[AvaloniaFact]` tests may create view models or touch `StudioHarness.Model`. Plain `[Fact]` tests that touch the dispatcher first bind it to the wrong thread, and the suite then hangs intermittently.
+  - `[AvaloniaFact]` tests must not use `TestContext.Current`: on the UI thread it can be the disposed context of an earlier test (seen on Windows). Two quick headless clicks on one row are a double click, which opens the file; on Windows an open file cannot be deleted.
   - CI: `.github/workflows/studio-windows.yml` runs the Studio tests and the packaged entry chain on `windows-latest`.
 - Studio remote deletes go through Core's `RemoteFileOperations.RemoveNodeByMetadataAsync`, never through the content-hash `RemoveAsync`. That path:
   - checks lstat type, link status and size without following links;

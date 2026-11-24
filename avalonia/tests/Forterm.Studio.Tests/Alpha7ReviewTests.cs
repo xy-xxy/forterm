@@ -227,7 +227,7 @@ public sealed class Alpha7ReviewTests
         w.ToggleTerminalCommand.Execute(null);
         Settle(s.Window);
         s.Window.GetVisualDescendants().OfType<StudioPane>().First(p => p.Name == "MonitorPane").MaximizeCommand!.Execute(null);
-        await Task.Delay(1100, TestContext.Current.CancellationToken);
+        await Task.Delay(1100, CancellationToken.None);
         Press(s.Window, Shortcuts.CloseTab);
         await Pump(() => false, TimeSpan.FromMilliseconds(200));
         Assert.Equal(2, w.Terminals.Count);
