@@ -188,6 +188,7 @@ public sealed class EditorAndAdvancedFileTests
     [AvaloniaFact]
     public async Task SudoPermissionsUseSeparateExecAndAskPasswordOnlyAtRandomPrompt()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The helper runs on the server, which is POSIX; on Windows the fixture cannot run it.");
         using var fixture = LoopbackFixture.Ssh(new Dictionary<string, string> { ["FIXTURE_POSIX"] = "1", ["FIXTURE_PERMISSION_EXEC"] = "1" });
         using var h = new StudioHarness(new ScriptedInteraction(["synthetic-sudo-only"]));
         var w = await Open(h, fixture.Port, disablePwd: true);

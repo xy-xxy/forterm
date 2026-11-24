@@ -901,8 +901,10 @@ public sealed class Alpha8Tests
             Consistent(w, window, "/proj/a.txt", "/proj");
             Click(Row("/proj/in/z.txt"));
             Consistent(w, window, "/proj/in/z.txt", "/proj/in");
+            await Task.Delay(700, TestContext.Current.CancellationToken); // not a double click, which opens the file
             Click(Row("/proj/in/z.txt"), OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control);
             Consistent(w, window, "/proj/in/z.txt", "/proj/in");
+            Assert.Empty(w.Editors);
             Item(Row("/proj/in/z.txt")).Focus();
             Key_(window, Key.Up);
             Consistent(w, window, "/proj/in/deep", "/proj/in/deep");
