@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Forterm.Studio.ViewModels"
+        xmlns:v="using:Forterm.Studio.Views"
+        xmlns:c="using:Forterm.Studio.Controls"
+        xmlns:sv="using:Forterm.Studio.Services"
+        x:Class="Forterm.Studio.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Forterm"
+        Width="1440" Height="860" MinWidth="960" MinHeight="600"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="36">
+  <Window.DataTemplates>
+    <DataTemplate DataType="vm:LibraryViewModel"><v:LibraryView/></DataTemplate>
+    <DataTemplate DataType="vm:WorkspaceViewModel"><v:WorkspaceView/></DataTemplate>
+    <DataTemplate DataType="vm:MonitorViewModel"><v:MonitorView/></DataTemplate>
+    <DataTemplate DataType="vm:EditorTabViewModel"><v:EditorView/></DataTemplate>
+  </Window.DataTemplates>
+
+  <LayoutTransformControl Name="Scaler">
+  <Grid RowDefinitions="36,Auto,*">
+    <!-- Title bar: window controls inset, app icons, session tabs, tools. Empty space drags the window. -->
+    <Border Name="TitleBar" Background="{DynamicResource St.TitleBar}">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <Border Name="LeftInset" Width="8"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="0,0,8,0">
+          <Button Classes="title-icon" Classes.on="{Binding IsHomeSelected}" Command="{Binding ShowHomeCommand}" ToolTip.Tip="连接库" AutomationProperties.Name="连接库">
+            <c:StrokeIcon Data="{StaticResource Icon.Server}"/>
+          </Button>
+          <Button Classes="title-icon" Command="{Binding OpenLocalTerminalCommand}" ToolTip.Tip="新建本地终端" AutomationProperties.Name="新建本地终端">
+            <c:StrokeIcon Data="{StaticResource Icon.Terminal}"/>
+          </Button>
+        </StackPanel>
+        <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Name="TabScroller">
+          <ItemsControl ItemsSource="{Binding Workspaces}" VerticalAlignment="Bottom">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2"/></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:WorkspaceViewModel">
+                <Button Classes="session-tab" Classes.active="{Binding IsActive}" Command="{Binding ActivateCommand}"
+                        AutomationProperties.Name="{Binding Title}" ToolTip.Tip="{Binding Endpoint}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Title}" MaxWidth="180" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="12.5"/>
+                    <Button Classes="chip-close" Command="{Binding CloseCommand}" ToolTip.Tip="关闭会话" AutomationProperties.Name="关闭会话">
+                      <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.4"/>
+                    </Button>
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+          <Button Classes="title-icon" Name="PaletteButton" Command="{Binding OpenPaletteCommand}" AutomationProperties.Name="命令面板">
+            <c:StrokeIcon Data="{StaticResource Icon.Search}"/>
+          </Button>
+          <Button Classes="title-icon" Name="ThemeToggle" ToolTip.Tip="切换明亮 / 暗夜" AutomationProperties.Name="切换主题">
+            <c:StrokeIcon Data="{StaticResource Icon.Contrast}"/>
+          </Button>
+          <Button Classes="title-icon" Name="SettingsButton" ToolTip.Tip="系统配置" AutomationProperties.Name="系统配置">
+            <c:StrokeIcon Data="{StaticResource Icon.Settings}"/>
+          </Button>
+          <Border Name="RightInset" Width="8"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Launch notices (rejected arguments etc.). -->
+    <Border Grid.Row="1" Classes="reveal" Background="{DynamicResource St.Notice}" IsVisible="{Binding HasNotice}" Padding="12,6">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="flat" Command="{Binding DismissNoticeCommand}" AutomationProperties.Name="关闭提示">
+          <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="12" Height="12"/>
+        </Button>
+        <c:StrokeIcon Data="{StaticResource Icon.Warning}" Width="15" Height="15" Brush="{DynamicResource St.Warning}" Margin="0,0,8,0"/>
+        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
+
+    <ContentControl Name="Host" Grid.Row="2" Content="{Binding Selected}"/>
+
+    <!-- short messages -->
+    <ItemsControl Grid.Row="2" ItemsSource="{Binding Toasts.Items}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,36" Width="340">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="sv:ToastItem">
+          <Border Classes="toast" Classes.leaving="{Binding IsLeaving}" PointerEntered="OnToastEntered" PointerExited="OnToastExited">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="9">
+              <Panel Width="16" VerticalAlignment="Center">
+                <c:StrokeIcon Data="{StaticResource Icon.Check}" Brush="{DynamicResource St.Accent}" Width="16" Height="16" Thickness="2.4" IsVisible="{Binding IsSuccess}"/>
+                <c:StrokeIcon Data="{StaticResource Icon.Activity}" Brush="{DynamicResource St.Data1}" Width="16" Height="16" IsVisible="{Binding IsInfo}"/>
+                <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Warning}" Width="16" Height="16" IsVisible="{Binding IsWarning}"/>
+                <c:StrokeIcon Data="{StaticResource Icon.Alarm}" Brush="{DynamicResource St.Danger}" Width="16" Height="16" IsVisible="{Binding IsError}"/>
+              </Panel>
+              <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" FontSize="12.5" VerticalAlignment="Center"/>
+              <Button Grid.Column="2" Classes="link" Content="{Binding ActionTitle}" Command="{Binding ActionCommand}" IsVisible="{Binding HasAction}" VerticalAlignment="Center"/>
+              <Button Grid.Column="3" Classes="flat" Command="{Binding DismissCommand}" VerticalAlignment="Center" AutomationProperties.Name="关闭提示">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+              </Button>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- command palette -->
+    <Panel Name="PaletteLayer" Grid.RowSpan="3" KeyboardNavigation.TabNavigation="Cycle" Background="#66000000" IsVisible="{Binding IsOpen}" DataContext="{Binding Palette}" x:DataType="vm:PaletteViewModel">
+      <Border Name="PaletteBox" Classes="palette reveal" Width="560" MaxHeight="460" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,96,0,0" IsVisible="{Binding IsOpen}">
+        <DockPanel>
+          <TextBox Name="PaletteText" DockPanel.Dock="Top" Text="{Binding Text}" PlaceholderText="输入会话、连接、命令或设置的名称" FontSize="14" Padding="12,9" VerticalContentAlignment="Center" AutomationProperties.Name="命令面板搜索"/>
+          <TextBlock DockPanel.Dock="Bottom" Classes="dim" FontSize="11" Margin="6,8,6,0" Text="↑ ↓ 选择　Enter 执行　Esc 关闭"/>
+          <Panel Margin="0,8,0,0" MinHeight="60">
+            <ListBox Name="PaletteList" ItemsSource="{Binding Matches}" SelectedIndex="{Binding Selected}" Background="Transparent" Focusable="False">
+              <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:PaletteEntry">
+                  <Grid ColumnDefinitions="62,Auto,*,Auto" ColumnSpacing="8" Background="Transparent">
+                    <TextBlock Classes="dim" FontSize="11" Text="{Binding Group}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="2" Classes="dim" FontSize="11.5" Text="{Binding Detail}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="3" Classes="dim" FontSize="11" Text="{Binding Keys}" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Text="没有匹配的项" Classes="dim" IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Panel>
+        </DockPanel>
+      </Border>
+    </Panel>
+  </Grid>
+  </LayoutTransformControl>
+</Window>

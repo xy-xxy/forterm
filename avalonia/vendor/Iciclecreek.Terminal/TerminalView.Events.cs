@@ -1,0 +1,743 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Input.TextInput;
+using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
+using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
+using Avalonia.Media.Immutable;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Rendering;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Iciclecreek.Avalonia.Terminal;
+using Porta.Pty;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using XTerm.Buffer;
+using XTerm.Events;
+using XT = global::XTerm;
+
+namespace Iciclecreek.Terminal
+{
+
+    public partial class TerminalView
+    {
+
+        public static readonly RoutedEvent<TitleChangedEventArgs> TitleChangedEvent =
+            RoutedEvent.Register<TerminalView, TitleChangedEventArgs>(
+                nameof(TitleChanged),
+                RoutingStrategies.Bubble);
+
+        public static void AddTitleChangedHandler(Interactive target, EventHandler<TitleChangedEventArgs> handler) =>
+            target.AddHandler(TitleChangedEvent, handler);
+
+        public static void RemoveTitleChangedHandler(Interactive target, EventHandler<TitleChangedEventArgs> handler) =>
+            target.RemoveHandler(TitleChangedEvent, handler);
+
+        public static readonly RoutedEvent<WindowMovedEventArgs> WindowMovedEvent =
+            RoutedEvent.Register<TerminalView, WindowMovedEventArgs>(
+                nameof(WindowMoved),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowMovedHandler(Interactive target, EventHandler<WindowMovedEventArgs> handler) =>
+            target.AddHandler(WindowMovedEvent, handler);
+
+        public static void RemoveWindowMovedHandler(Interactive target, EventHandler<WindowMovedEventArgs> handler) =>
+            target.RemoveHandler(WindowMovedEvent, handler);
+
+        public static readonly RoutedEvent<WindowResizedEventArgs> WindowResizedEvent =
+            RoutedEvent.Register<TerminalView, WindowResizedEventArgs>(
+                nameof(WindowResized),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowResizedHandler(Interactive target, EventHandler<WindowResizedEventArgs> handler) =>
+            target.AddHandler(WindowResizedEvent, handler);
+
+        public static void RemoveWindowResizedHandler(Interactive target, EventHandler<WindowResizedEventArgs> handler) =>
+            target.RemoveHandler(WindowResizedEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowMinimizedEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowMinimized),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowMinimizedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowMinimizedEvent, handler);
+
+        public static void RemoveWindowMinimizedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowMinimizedEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowMaximizedEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowMaximized),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowMaximizedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowMaximizedEvent, handler);
+
+        public static void RemoveWindowMaximizedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowMaximizedEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowRestoredEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowRestored),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowRestoredHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowRestoredEvent, handler);
+
+        public static void RemoveWindowRestoredHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowRestoredEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowRaisedEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowRaised),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowRaisedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowRaisedEvent, handler);
+
+        public static void RemoveWindowRaisedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowRaisedEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowLoweredEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowLowered),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowLoweredHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowLoweredEvent, handler);
+
+        public static void RemoveWindowLoweredHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowLoweredEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> WindowFullscreenedEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(WindowFullscreened),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowFullscreenedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(WindowFullscreenedEvent, handler);
+
+        public static void RemoveWindowFullscreenedHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(WindowFullscreenedEvent, handler);
+
+        public static readonly RoutedEvent<RoutedEventArgs> BellRangEvent =
+            RoutedEvent.Register<TerminalView, RoutedEventArgs>(
+                nameof(BellRang),
+                RoutingStrategies.Bubble);
+
+        public static void AddBellRangHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.AddHandler(BellRangEvent, handler);
+
+        public static void RemoveBellRangHandler(Interactive target, EventHandler<RoutedEventArgs> handler) =>
+            target.RemoveHandler(BellRangEvent, handler);
+
+        public static readonly RoutedEvent<WindowInfoRequestedEventArgs> WindowInfoRequestedEvent =
+            RoutedEvent.Register<TerminalView, WindowInfoRequestedEventArgs>(
+                nameof(WindowInfoRequested),
+                RoutingStrategies.Bubble);
+
+        public static void AddWindowInfoRequestedHandler(Interactive target, EventHandler<WindowInfoRequestedEventArgs> handler)
+        {
+            target.AddHandler(WindowInfoRequestedEvent, handler);
+            RepublishWindowInfoBelow(target);
+        }
+
+        public static void RemoveWindowInfoRequestedHandler(Interactive target, EventHandler<WindowInfoRequestedEventArgs> handler)
+        {
+            target.RemoveHandler(WindowInfoRequestedEvent, handler);
+            RepublishWindowInfoBelow(target);
+        }
+
+        // The event bubbles, so a handler on a host (a TerminalControl, a window) changes the answers
+        // of every view beneath it. See PublishWindowInfo.
+        private static void RepublishWindowInfoBelow(Interactive target)
+        {
+            if (target is not Visual visual)
+                return;
+
+            foreach (var view in visual.GetSelfAndVisualDescendants().OfType<TerminalView>())
+                view.PublishWindowInfo();
+        }
+
+        /// <summary>
+        /// A desktop notification requested by the running program (OSC 9 or Kitty OSC 99). The
+        /// terminal cannot post OS notifications itself; the application decides how — or
+        /// whether — to show it. Structured fields are populated for OSC 99; OSC 9 carries only
+        /// <c>Text</c>.
+        /// </summary>
+        public static readonly RoutedEvent<TerminalNotificationEventArgs> NotificationRequestedEvent =
+            RoutedEvent.Register<TerminalView, TerminalNotificationEventArgs>(
+                nameof(NotificationRequested),
+                RoutingStrategies.Bubble);
+
+        public event EventHandler<TerminalNotificationEventArgs> NotificationRequested
+        {
+            add => AddHandler(NotificationRequestedEvent, value);
+            remove => RemoveHandler(NotificationRequestedEvent, value);
+        }
+
+        /// <summary>
+        /// The running program asked for the user's attention (iTerm2 OSC 1337 RequestAttention).
+        /// <see cref="TerminalAttentionEventArgs.Action"/> is the request verbatim: "yes" (bounce
+        /// until focused), "once", "fireworks", or "no" (cancel a pending request) — the
+        /// application owns the dock/taskbar, so the application interprets it.
+        /// </summary>
+        public static readonly RoutedEvent<TerminalAttentionEventArgs> AttentionRequestedEvent =
+            RoutedEvent.Register<TerminalView, TerminalAttentionEventArgs>(
+                nameof(AttentionRequested),
+                RoutingStrategies.Bubble);
+
+        public event EventHandler<TerminalAttentionEventArgs> AttentionRequested
+        {
+            add => AddHandler(AttentionRequestedEvent, value);
+            remove => RemoveHandler(AttentionRequestedEvent, value);
+        }
+
+
+        /// <summary>
+        /// Event raised once when the shell produces its first output (e.g. the prompt),
+        /// indicating it is ready to accept input.
+        /// </summary>
+        public event EventHandler? ShellReady;
+
+        /// <summary>
+        /// Event raised when the PTY process exits.
+        /// </summary>
+        public event EventHandler<ProcessExitedEventArgs>? ProcessExited;
+
+        /// <summary>
+        /// Raised on the UI thread just before the view writes one of its own lines into the terminal --
+        /// a read error, or the process-exited notice -- so the host can reword it through
+        /// <see cref="TerminalMessageEventArgs.Text"/> or suppress it with
+        /// <see cref="TerminalMessageEventArgs.Handled"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>The line is written only after every handler has returned, so setting
+        /// <see cref="TerminalMessageEventArgs.Handled"/> is never a race against the write. For the exit,
+        /// this is raised before <see cref="ProcessExited"/>, which keeps the order the buffer has always
+        /// had: the notice is in it by the time the host hears the process ended.</para>
+        /// <para>A handler that throws is not allowed to cost the user the line: the exception is logged and
+        /// <see cref="TerminalMessageEventArgs.DefaultText"/> is written as though nobody had intervened.</para>
+        /// <para>Nothing is written if, by the time the handlers return, the view has moved on to another
+        /// session -- a relaunch, a re-attach, a detach -- since the line would describe a process the buffer
+        /// no longer belongs to. Compare <see cref="TerminalMessageEventArgs.SessionId"/> with
+        /// <see cref="SessionId"/> to tell such a message apart.</para>
+        /// </remarks>
+        public event EventHandler<TerminalMessageEventArgs>? WritingMessage;
+
+        /// <summary>
+        /// Event raised for each chunk of output the terminal receives from the PTY process.
+        /// </summary>
+        /// <remarks>
+        /// <para>Raised on the UI THREAD by default, so a handler may touch UI directly. The cost is that
+        /// chunks arrive marshalled and slightly late; a consumer that needs the tightest possible latency —
+        /// matching a dev server's "listening on :port" line, say — can set
+        /// <see cref="OutputReceivedOnReadTask"/> and take delivery on the read task instead.</para>
+        /// <para>The payload is UTF-8 decoded TEXT, not raw bytes, and it is the text as it came off the
+        /// pty: escape sequences included, chunked arbitrarily rather than by line.</para>
+        /// <para>A throwing handler is caught and swallowed. An unhandled exception on the dispatcher would
+        /// take the application down, and sniffing output is exactly the place arbitrary host code runs. The
+        /// catch wraps the whole invocation, so a handler that throws also suppresses handlers subscribed
+        /// AFTER it for that chunk — isolating each would cost a <c>GetInvocationList()</c> allocation per
+        /// chunk, which is the per-chunk overhead this event is otherwise careful to avoid.</para>
+        /// </remarks>
+        public event EventHandler<OutputReceivedEventArgs>? OutputReceived;
+
+        /// <summary>
+        /// Event raised when a URL in the terminal is Ctrl+Clicked.
+        /// </summary>
+        public event EventHandler<UrlClickedEventArgs>? UrlClicked;
+
+        /// <summary>
+        /// Event raised when the terminal title changes.
+        /// </summary>
+        public event EventHandler<TitleChangedEventArgs>? TitleChanged;
+
+        /// <summary>
+        /// Event raised when a window move command is received from the terminal.
+        /// </summary>
+        public event EventHandler<WindowMovedEventArgs>? WindowMoved;
+
+        /// <summary>
+        /// Event raised when a window resize command is received from the terminal.
+        /// </summary>
+        public event EventHandler<WindowResizedEventArgs>? WindowResized;
+
+        /// <summary>
+        /// Event raised when a window minimize command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowMinimized;
+
+        /// <summary>
+        /// Event raised when a window maximize command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowMaximized;
+
+        /// <summary>
+        /// Event raised when a window restore command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowRestored;
+
+        /// <summary>
+        /// Event raised when a window raise command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowRaised;
+
+        /// <summary>
+        /// Event raised when a window lower command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowLowered;
+
+        /// <summary>
+        /// Event raised when a window fullscreen command is received from the terminal.
+        /// </summary>
+        public event EventHandler? WindowFullscreened;
+
+        /// <summary>
+        /// Event raised when the terminal bell is activated.
+        /// </summary>
+        public event EventHandler? BellRang;
+
+        /// <summary>
+        /// Event raised when window information is requested by the terminal.
+        /// The handler should set the response properties on the event args.
+        /// </summary>
+        public event EventHandler<WindowInfoRequestedEventArgs>? WindowInfoRequested
+        {
+            add { _windowInfoRequested += value; PublishWindowInfo(); }
+            remove { _windowInfoRequested -= value; PublishWindowInfo(); }
+        }
+
+        private EventHandler<WindowInfoRequestedEventArgs>? _windowInfoRequested;
+
+
+        private void OnTerminalTitleChanged(object? sender, XT.Events.TerminalEvents.TitleChangeEventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+
+                var args = new TitleChangedEventArgs(e.Title)
+                {
+                    RoutedEvent = TitleChangedEvent
+                };
+
+                RaiseEvent(args);
+                TitleChanged?.Invoke(this, args);
+            });
+        }
+
+        /// <summary>
+        /// The emulator's status line changed: appeared, vanished, or was written to.
+        /// </summary>
+        /// <remarks>
+        /// <para>The Title/TitleChanged shape, one row bigger: the emulator owns the state
+        /// (XTerm.NET#148), this view decides what to draw. Fires on the pty reader thread, so the
+        /// read and the layout both happen inside the post -- and the state is read THERE, not
+        /// captured here, so a burst of writes coalesces to the current row rather than replaying
+        /// stale ones.</para>
+        /// <para>Only a HOST-WRITABLE status line (DECSSDT 2) is shown. The indicator (type 1) is
+        /// the terminal's own status -- keyboard state, printer state -- and a terminal control
+        /// embedded in someone's application has no status of its own worth a row of their layout;
+        /// DEC hardware showed one because it WAS the whole screen. Drawing nothing is the decision
+        /// issue #151 asked to have written down, and this is it. A program that selects type 1
+        /// loses nothing it could ever have written: DECSASD 1 is refused without a host-writable
+        /// line, so there is no text to lose.</para>
+        /// </remarks>
+        private void OnTerminalStatusLineChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_terminal is not { } terminal)
+                    return;
+
+                SetStatusLine(terminal.StatusDisplayType == 2 ? terminal.StatusLine : null);
+            });
+        }
+
+        private void OnTerminalWindowMoved(object? sender, XT.Events.TerminalEvents.WindowMovedEventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new WindowMovedEventArgs(e.X, e.Y)
+                {
+                    RoutedEvent = WindowMovedEvent
+                };
+
+                RaiseEvent(args);
+                WindowMoved?.Invoke(this, args);
+            });
+        }
+
+        /// <summary>
+        /// The grid changed size because a PROGRAM asked it to -- DECCOLM's 80/132 switch, in
+        /// practice -- rather than because the host laid this control out at a new size.
+        /// </summary>
+        /// <remarks>
+        /// <para>The emulator has always announced this: Terminal.Resize raises Resized, and
+        /// SetColumnMode goes through Resize like any other resize. Nothing here listened, so
+        /// switching to 132 columns re-gridded the buffer while the window kept its 80-column pixel
+        /// width, and columns 81 onwards were drawn past the right edge and clipped -- with the
+        /// application believing all 132 were visible.</para>
+        /// <para>Reported as the same window-resize this control already raises for
+        /// <c>CSI 8 t</c>, so a host that sizes itself for one sizes itself for the other and a host
+        /// that declines keeps declining. Declining is still a real answer: what a host must not do
+        /// is silently show 80 of 132 columns.</para>
+        /// </remarks>
+        private void OnTerminalResized(object? sender, XT.Events.TerminalEvents.ResizeEventArgs e)
+        {
+            // Synchronously, before the post: Resized is raised inside Terminal.Resize, so this is
+            // the only moment the flag set around the layout re-grid is still standing.
+            if (_regridFromLayout)
+                return;
+
+            var cols = e.Cols;
+            var rows = e.Rows;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                // DECCOLM asks the host to resize by the same route as CSI 8 t, so it answers to
+                // the same switch -- read inside the post like every other window-operation gate:
+                // it is a styled property, which only the UI thread may read, and Resized fires on
+                // the pty reader thread. Note what refusing does NOT undo: the emulator has already
+                // re-gridded to 132 columns, because that gate lives behind a mode the program sets
+                // for itself. The window keeps its width and the extra columns clip, which is the
+                // honest consequence of a host declining -- and the reason closing this properly
+                // needs the gate upstream.
+                if (!AllowWindowOps)
+                    return;
+
+                // The metrics are the UI thread's to read, and a resize can arrive on the pty reader
+                // thread before this control has ever measured a cell.
+                if (_charWidth <= 0 || _charHeight <= 0)
+                    return;
+
+                // What the host spends AROUND this control has to be added back, or it comes out of
+                // the text area: the request is a window size, and the columns only get what is
+                // left after padding, borders and anything sharing the window. Asking for exactly
+                // 132 cells wide inside an 8px padding delivered 130 columns to a program that had
+                // been told it had 132 -- the same silent shortfall this whole change is about,
+                // just arriving by a different route.
+                var top = TopLevel.GetTopLevel(this);
+                var chromeWidth = top is not null ? Math.Max(0, top.Bounds.Width - Bounds.Width) : 0;
+                var chromeHeight = top is not null ? Math.Max(0, top.Bounds.Height - Bounds.Height) : 0;
+
+                var width = (int)Math.Ceiling(cols * _charWidth + Math.Max(0, GutterWidth) + chromeWidth);
+                var height = (int)Math.Ceiling(rows * _charHeight + chromeHeight);
+
+                var args = new WindowResizedEventArgs(width, height)
+                {
+                    RoutedEvent = WindowResizedEvent
+                };
+
+                RaiseEvent(args);
+                WindowResized?.Invoke(this, args);
+            });
+        }
+
+        private void OnTerminalWindowResized(object? sender, XT.Events.TerminalEvents.WindowResizedEventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+
+                var args = new WindowResizedEventArgs(e.Width, e.Height)
+                {
+                    RoutedEvent = WindowResizedEvent
+                };
+
+                RaiseEvent(args);
+                WindowResized?.Invoke(this, args);
+            });
+        }
+
+        private void OnTerminalWindowMinimized(object? sender, EventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowMinimizedEvent);
+                RaiseEvent(args);
+                WindowMinimized?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalWindowMaximized(object? sender, EventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowMaximizedEvent);
+                RaiseEvent(args);
+                WindowMaximized?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalWindowRestored(object? sender, EventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowRestoredEvent);
+                RaiseEvent(args);
+                WindowRestored?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalWindowRaised(object? sender, EventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowRaisedEvent);
+                RaiseEvent(args);
+                WindowRaised?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalWindowLowered(object? sender, EventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowLoweredEvent);
+                RaiseEvent(args);
+                WindowLowered?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalWindowFullscreened(object? sender, EventArgs e)
+        {
+            PostWindowChange(() =>
+            {
+                // Refused silently when the host has not granted window operations -- nothing is
+                // raised, so no host acts, and a bare TerminalView with its own handler is covered
+                // too. Asked INSIDE the post, for two reasons that arrive together: AllowWindowOps
+                // is a styled property, which only the UI thread may read, and this handler fires
+                // on the pty reader thread; and the answer should be the host's CURRENT one -- a
+                // host that revokes permission while a request sits queued has revoked it for that
+                // request too.
+                if (!AllowWindowOps)
+                    return;
+
+                var args = new RoutedEventArgs(WindowFullscreenedEvent);
+                RaiseEvent(args);
+                WindowFullscreened?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnTerminalBellRang(object? sender, EventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var args = new RoutedEventArgs(BellRangEvent);
+                RaiseEvent(args);
+                BellRang?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        /// <summary>
+        /// Answers a program asking about the window -- its size in pixels, its position, its state or
+        /// its icon title. Off the UI thread the answer is what the UI thread last published; the reader
+        /// waits on the UI thread only when there is nothing current to give, and then at most once per
+        /// chunk.
+        /// </summary>
+        /// <remarks>
+        /// <para>The emulator reads <c>e.Handled</c> the moment this returns, so the answer cannot be
+        /// posted -- Post returns before the handler runs, and a query answered after its only reader
+        /// moved on goes unanswered.</para>
+        /// <para>Nor can the reader wait on the UI thread, which is how this used to work. This is raised
+        /// from <c>Terminal.Write</c>, which the read loop calls inside <c>lock (_terminalLock)</c>, and
+        /// the UI thread takes that lock in <see cref="ClearScreen"/>, <see cref="CurrentLineText"/>,
+        /// <c>WriteOwnLine</c> and ArrangeOverride. A UI thread waiting there cannot run the job being
+        /// waited for. Unbounded, that was a deadlock; bounded per query, a chunk of N queries froze the
+        /// UI for N patiences -- 20 queries, ~4.9 s.</para>
+        /// <para>So the UI thread asks the handlers ahead of time and publishes their answers
+        /// (<see cref="PublishWindowInfo"/>), and the reader gives those. Two cases still wait, bounded
+        /// by <see cref="WindowInfoPatience"/> and capped at one timeout per chunk: a view never yet in a
+        /// tree, and a change this reader posted -- a new title, a move, an iconify -- that the UI thread
+        /// has not applied yet (<see cref="PostWindowChange"/>). Then the queued job runs after that
+        /// change, as before, and an idle UI thread answers with the new value. Leaving
+        /// <c>Handled</c> false on timeout is the emulator's documented "cannot say", and a wrong
+        /// number would be worse than none.</para>
+        /// </remarks>
+        private void OnTerminalWindowInfoRequested(object? sender, XT.Events.TerminalEvents.WindowInfoRequestedEventArgs e)
+        {
+            // PIXEL GEOMETRY is answered here, inline, on whatever thread the query arrived on --
+            // which is the PTY reader's. The emulator waits synchronously for these answers, so
+            // routing them through the UI thread stalled the reader for up to WindowInfoPatience
+            // whenever the UI was busy: a program that asks CSI 14/15/16 t mid-stream froze its own
+            // output for a quarter of a second. The answers are the metrics PublishCellPixelSize
+            // already published into Options on every layout pass -- plain int reads, safe from any
+            // thread, and the SAME numbers the emulator tiles images by, which is the consistency
+            // the placeholder path depends on. A host cannot meaningfully override the view's real
+            // pixel metrics, so these no longer consult handlers; position, titles and state are
+            // genuinely the host's to answer, and are answered from what the host last said.
+            switch (e.Request)
+            {
+                case XT.Common.WindowInfoRequest.CellSizePixels:
+                    e.CellWidth = _terminal.Options.CellWidthPixels;
+                    e.CellHeight = _terminal.Options.CellHeightPixels;
+                    e.Handled = e.CellWidth > 0 && e.CellHeight > 0;
+                    return;
+
+                case XT.Common.WindowInfoRequest.SizePixels:
+                case XT.Common.WindowInfoRequest.ScreenSizePixels:
+                    e.WidthPixels = _terminal.Cols * _terminal.Options.CellWidthPixels;
+                    e.HeightPixels = _terminal.Rows * _terminal.Options.CellHeightPixels;
+                    e.Handled = e.WidthPixels > 0 && e.HeightPixels > 0;
+                    return;
+            }
+
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                // The answers the UI thread last published, read without waiting. Waiting is what
+                // froze the UI: this runs inside lock (_terminalLock), and a UI thread blocked on
+                // that lock -- ClearScreen, ArrangeOverride on every grid resize -- cannot run the
+                // job this would wait for, so each query in the chunk sat out its full patience.
+                // `yes $'\e[13t'` was minutes of frozen UI.
+                //
+                // Not while a change this reader posted is still on its way: `\e]0;new\a\e[20t` in
+                // one chunk asks before the new title reaches the window, and the published answer is
+                // the old one. The queued path below runs after the change, so it gets it right.
+                if (WindowInfoIsCurrent && PublishedWindowInfo(e.Request) is { } published)
+                {
+                    CopyWindowInfo(published, e);
+                    RefreshWindowInfoSoon();
+                    return;
+                }
+
+                // Nothing current: never published, or a change is still queued. Ask the UI thread, but
+                // once one query in this chunk has timed out, answer the rest "cannot say" at once.
+                // The UI thread is evidently not coming, and the patience is per query while the
+                // chunk can hold thousands of them.
+                if (_windowInfoTimedOut)
+                    return;
+
+                // Whoever gets here first wins, and the loser does nothing.
+                //
+                // Timing out does not cancel the queued job -- the UI thread runs it whenever it
+                // frees up, which may be long after the emulator gave up waiting and sent its
+                // "cannot say". Writing the answer into e THEN is a write to state the emulator has
+                // moved past, and on the next query it would find Handled already true from the
+                // previous one. So the timeout claims the right to answer, and the late callback
+                // finds it taken and returns.
+                var claim = 0;
+
+                var pending = Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (Interlocked.Exchange(ref claim, 1) == 0)
+                        AnswerWindowInfo(e);
+                });
+
+                if (!pending.GetTask().Wait(WindowInfoPatience) && Interlocked.Exchange(ref claim, 1) == 0)
+                {
+                    _windowInfoTimedOut = true;
+                    Debug.WriteLine("[TerminalView] window-info query timed out; answering unhandled");
+                }
+
+                return;
+            }
+
+            // Inline when this IS the UI thread, so a host driving the terminal directly neither
+            // deadlocks on itself nor pays a dispatcher round trip.
+            AnswerWindowInfo(e);
+        }
+
+        /// <summary>
+        /// Everything the terminal sends TO the process: keystrokes, replies to its queries, focus and mouse
+        /// reports.
+        /// </summary>
+        /// <remarks>
+        /// Diagnostic. A program that behaves differently because of something the TERMINAL said is
+        /// otherwise impossible to explain from the outside — the process's own output shows the decision
+        /// but never the cause, and focus and mouse reports do not pass through the emulator's
+        /// <c>DataReceived</c> at all, so watching that misses them entirely.
+        /// </remarks>
+        public event EventHandler<string>? InputSent;
+
+        private void OnTerminalNotificationReceived(object? sender, XT.Events.TerminalEvents.NotificationEventArgs e) =>
+            PostToHost(() => RaiseEvent(new TerminalNotificationEventArgs(NotificationRequestedEvent, e)));
+
+        private void OnTerminalAttentionRequested(object? sender, XT.Events.TerminalEvents.AttentionRequestedEventArgs e) =>
+            PostToHost(() => RaiseEvent(new TerminalAttentionEventArgs(AttentionRequestedEvent, e.Action)));
+
+    }
+}

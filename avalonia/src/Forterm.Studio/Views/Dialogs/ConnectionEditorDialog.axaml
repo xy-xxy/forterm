@@ -1,0 +1,289 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Forterm.Studio.ViewModels"
+        xmlns:c="using:Forterm.Studio.Controls"
+        x:Class="Forterm.Studio.Views.Dialogs.ConnectionEditorDialog"
+        x:DataType="vm:ConnectionEditorViewModel"
+        Title="{Binding Title}" Width="780" Height="640" MinHeight="420" CanResize="True"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        WindowDecorations="BorderOnly"
+        Background="{DynamicResource St.Dialog}">
+  <Window.Styles>
+    <Style Selector="Border.section">
+      <Setter Property="Background" Value="{DynamicResource St.DialogSection}"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Margin" Value="0,0,0,10"/>
+      <Setter Property="Padding" Value="14,4"/>
+    </Style>
+    <Style Selector="Grid.row">
+      <Setter Property="MinHeight" Value="46"/>
+    </Style>
+    <Style Selector="Grid.row > StackPanel.label">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,6,16,6"/>
+      <Setter Property="Spacing" Value="2"/>
+    </Style>
+    <Style Selector="TextBlock.label"><Setter Property="FontSize" Value="12.5"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="TextBlock.hint"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style Selector="Border.rule"><Setter Property="Height" Value="1"/><Setter Property="Background" Value="{DynamicResource St.Line}"/></Style>
+    <Style Selector="Button.nav">
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.Text}"/>
+      <Setter Property="Padding" Value="10,7"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+    <Style Selector="Button.nav.active /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.NavActive}"/><Setter Property="Foreground" Value="{DynamicResource St.TextStrong}"/></Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="ComboBox"><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="MinHeight" Value="30"/></Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <Grid Name="Header" DockPanel.Dock="Top" Height="42" Background="Transparent" ColumnDefinitions="40,*,40">
+      <TextBlock Grid.Column="1" Text="{Binding Title}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="title" FontSize="13.5"/>
+      <Button Grid.Column="2" Classes="flat" Name="CloseButton" HorizontalAlignment="Center" AutomationProperties.Name="关闭">
+        <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="13" Height="13"/>
+      </Button>
+    </Grid>
+
+    <!-- Footer: test on the left, cancel/save on the right. -->
+    <StackPanel DockPanel.Dock="Bottom" Margin="16,6,16,14" Spacing="6">
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" FontSize="12"/>
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <Button Classes="secondary" Command="{Binding TestCommand}" Content="测试连接" IsEnabled="{Binding !IsTesting}" AutomationProperties.Name="测试连接"/>
+          <TextBlock Text="{Binding TestResult}" VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="360" Classes="dim"/>
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <Button Classes="secondary" Name="CancelButton" Content="取消"/>
+          <Button Classes="primary" Name="SaveButton" Content="{Binding SaveText}" AutomationProperties.Name="保存连接"/>
+        </StackPanel>
+      </Grid>
+    </StackPanel>
+
+    <Grid ColumnDefinitions="150,*" Margin="16,0,10,0">
+      <!-- Section navigation (anchors + scroll spy). -->
+      <StackPanel Name="Nav" Spacing="2" Margin="0,0,12,0">
+        <Button Classes="nav" Tag="SectionBasic"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Link}" Width="13" Height="13"/><TextBlock Text="基本信息"/></StackPanel></Button>
+        <Button Classes="nav" Tag="SectionConnection"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Sliders}" Width="13" Height="13"/><TextBlock Text="连接设置"/></StackPanel></Button>
+        <Button Classes="nav" Tag="SectionJump" IsVisible="{Binding IsSsh}"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Jump}" Width="13" Height="13"/><TextBlock Text="跳板机"/></StackPanel></Button>
+        <Button Classes="nav" Tag="SectionProxy" IsVisible="{Binding IsSsh}"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Globe}" Width="13" Height="13"/><TextBlock Text="代理设置"/></StackPanel></Button>
+        <Button Classes="nav" Tag="SectionOther" IsVisible="{Binding HasTerminal}"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="13" Height="13"/><TextBlock Text="其他设置"/></StackPanel></Button>
+        <Button Classes="nav" Tag="SectionInit"><StackPanel Orientation="Horizontal" Spacing="8"><c:StrokeIcon Data="{StaticResource Icon.Play}" Width="13" Height="13"/><TextBlock Text="初始化"/></StackPanel></Button>
+      </StackPanel>
+
+      <ScrollViewer Name="Scroller" Grid.Column="1">
+        <StackPanel Name="Sections" Margin="0,0,8,0">
+          <!-- 基本信息 -->
+          <Border Classes="section" Name="SectionBasic">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="名称"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding Name}" PlaceholderText="我的服务器" VerticalAlignment="Center" AutomationProperties.Name="名称"/>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="分组"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Groups}" SelectedItem="{Binding Group}" VerticalAlignment="Center" AutomationProperties.Name="分组"/>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="协议"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Protocols}" SelectedItem="{Binding Protocol}" VerticalAlignment="Center" AutomationProperties.Name="协议"/>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="地址"/><TextBlock Classes="hint" Text="填写目标地址和端口。"/></StackPanel>
+                <Grid Grid.Column="1" ColumnDefinitions="*,6,72" VerticalAlignment="Center">
+                  <TextBox Text="{Binding Host}" PlaceholderText="192.0.2.10" AutomationProperties.Name="地址"/>
+                  <TextBox Grid.Column="2" Text="{Binding Port}" AutomationProperties.Name="端口"/>
+                </Grid>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding !IsTelnet}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding !IsTelnet}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="验证方式"/><TextBlock Classes="hint" Text="密码、动态验证码（键盘交互）、私钥或本机 SSH Agent。"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding AuthChoices}" SelectedItem="{Binding AuthMode}" VerticalAlignment="Center" AutomationProperties.Name="验证方式"/>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="登录用户 / 登录密码"/></StackPanel>
+                <Grid Grid.Column="1" ColumnDefinitions="*,6,*" VerticalAlignment="Center">
+                  <TextBox Text="{Binding User}" PlaceholderText="root" AutomationProperties.Name="登录用户"/>
+                  <TextBox Grid.Column="2" Text="{Binding Password}" PasswordChar="•" PlaceholderText="{Binding PasswordHint}" IsVisible="{Binding UsesPassword}" AutomationProperties.Name="登录密码"/>
+                </Grid>
+              </Grid>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding UsesPassword}" MinHeight="32">
+                <StackPanel Classes="label"><TextBlock Classes="hint" Text="只保存到系统凭据（钥匙串 / 凭据管理器），不写入配置文件或导出。"/></StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                  <CheckBox Content="保存密码" IsChecked="{Binding SavePassword}" FontSize="12"/>
+                  <CheckBox Content="清除已保存的密码" IsChecked="{Binding ForgetPassword}" IsVisible="{Binding HasSavedPassword}" FontSize="12"/>
+                </StackPanel>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding UsesKey}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding UsesKey}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="私钥文件"/></StackPanel>
+                <Grid Grid.Column="1" ColumnDefinitions="*,6,Auto" VerticalAlignment="Center">
+                  <TextBox Text="{Binding KeyPath}" PlaceholderText="~/.ssh/id_ed25519" AutomationProperties.Name="私钥文件"/>
+                  <Button Grid.Column="2" Classes="secondary" Padding="10,5" MinWidth="0" Content="浏览" Command="{Binding BrowseKeyCommand}"/>
+                </Grid>
+              </Grid>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding UsesKey}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="私钥口令"/><TextBlock Classes="hint" Text="私钥未加密时留空。"/></StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                  <TextBox Text="{Binding Passphrase}" PasswordChar="•" AutomationProperties.Name="私钥口令"/>
+                  <CheckBox Content="保存口令到系统凭据" IsChecked="{Binding SavePassphrase}" FontSize="12"/>
+                  <CheckBox Content="清除已保存的口令" IsChecked="{Binding ForgetPassphrase}" IsVisible="{Binding HasSavedPassphrase}" FontSize="12"/>
+                </StackPanel>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label" VerticalAlignment="Top"><TextBlock Classes="label" Text="主机备注"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding Note}" AcceptsReturn="True" TextWrapping="Wrap" Height="64" Margin="0,8" AutomationProperties.Name="主机备注"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- 连接设置 -->
+          <Border Classes="section" Name="SectionConnection">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="超时时间（毫秒）"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding Timeout}" PlaceholderText="默认 45000" VerticalAlignment="Center" AutomationProperties.Name="超时时间"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="心跳时间（毫秒）"/><TextBlock Classes="hint" Text="SSH 协议保活，不向终端输入任何内容；0 关闭。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding Heartbeat}" PlaceholderText="15000" VerticalAlignment="Center" AutomationProperties.Name="心跳时间"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding HasTerminal}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding HasTerminal}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="终端显示编码"/><TextBlock Classes="hint" Text="出现乱码时，可以调整字符编码。"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding EncodingChoices}" SelectedItem="{Binding Encoding}" VerticalAlignment="Center" AutomationProperties.Name="终端显示编码"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- 跳板机 -->
+          <Border Classes="section" Name="SectionJump" IsVisible="{Binding IsSsh}">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="跳板机链路"/><TextBlock Classes="hint" Text="按实际链路顺序排列，第一项会最先连接。只能选择已保存的 SSH 连接。"/></StackPanel>
+                <Grid Grid.Column="1" ColumnDefinitions="*,6,Auto" VerticalAlignment="Center">
+                  <ComboBox ItemsSource="{Binding JumpCandidates}" SelectedItem="{Binding JumpCandidate}" PlaceholderText="选择跳板连接" IsEnabled="{Binding HasJumpCandidates}" AutomationProperties.Name="选择跳板连接"/>
+                  <Button Grid.Column="2" Classes="secondary" Padding="10,5" MinWidth="0" Command="{Binding AddJumpCommand}" IsEnabled="{Binding HasJumpCandidates}" AutomationProperties.Name="添加跳板机">
+                    <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="11" Height="11"/><TextBlock Text="添加跳板机"/></StackPanel>
+                  </Button>
+                </Grid>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Jumps}" Margin="0,0,0,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:JumpItem">
+                    <Grid ColumnDefinitions="28,*,Auto,Auto,Auto" Height="32">
+                      <Border Width="20" Height="20" CornerRadius="10" Background="{DynamicResource St.AccentSoft}">
+                        <TextBlock Text="{Binding Order}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource St.Accent}"/>
+                      </Border>
+                      <TextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                      <Button Grid.Column="2" Classes="pane-icon" ToolTip.Tip="上移" Command="{Binding $parent[Window].((vm:ConnectionEditorViewModel)DataContext).MoveJumpUpCommand}" CommandParameter="{Binding}"><c:StrokeIcon Data="{StaticResource Icon.ArrowUp}" Width="12" Height="12"/></Button>
+                      <Button Grid.Column="3" Classes="pane-icon" ToolTip.Tip="下移" Command="{Binding $parent[Window].((vm:ConnectionEditorViewModel)DataContext).MoveJumpDownCommand}" CommandParameter="{Binding}"><c:StrokeIcon Data="{StaticResource Icon.ArrowDown}" Width="12" Height="12"/></Button>
+                      <Button Grid.Column="4" Classes="pane-icon" ToolTip.Tip="移除" Command="{Binding $parent[Window].((vm:ConnectionEditorViewModel)DataContext).RemoveJumpCommand}" CommandParameter="{Binding}"><c:StrokeIcon Data="{StaticResource Icon.Close}" Width="12" Height="12"/></Button>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- 代理设置 -->
+          <Border Classes="section" Name="SectionProxy" IsVisible="{Binding IsSsh}">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="代理设置"/><TextBlock Classes="hint" Text="仅在需要通过 HTTP 或 SOCKS 代理出站时填写；代理会优先于跳板机链路生效（用于第一跳）。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding Proxy}" PlaceholderText="例如 socks5://127.0.0.1:1080" VerticalAlignment="Center" AutomationProperties.Name="代理"/>
+              </Grid>
+              <Border Classes="rule"/>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="禁用代理"/></StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding ProxyDisabled}" OnContent="" OffContent="" HorizontalAlignment="Right" AutomationProperties.Name="禁用代理"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- 其他设置 -->
+          <Border Classes="section" Name="SectionOther" IsVisible="{Binding HasTerminal}">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="终端类型"/><TextBlock Classes="hint" Text="当前连接使用的 TERM 类型；留空时默认使用 xterm-256color。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding TerminalType}" PlaceholderText="未设置" VerticalAlignment="Center" AutomationProperties.Name="终端类型"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="禁用 pwd 自动跳转"/><TextBlock Classes="hint" Text="开启联动时，终端打开后会写入一行提示符钩子，让左侧文件区跟随终端目录；某些堡垒机或安全策略环境不允许时请禁用。"/></StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding DisablePwdFollow}" OnContent="" OffContent="" HorizontalAlignment="Right" AutomationProperties.Name="禁用 pwd 自动跳转"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="禁止列表监控开启"/><TextBlock Classes="hint" Text="开启后，连接列表的“信息”列不显示此主机的 CPU/内存/磁盘，监控栏改为手动刷新，不会自动执行采集命令。"/></StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding DisableListMonitor}" OnContent="" OffContent="" HorizontalAlignment="Right" AutomationProperties.Name="禁止列表监控开启"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="Cipher 算法"/><TextBlock Classes="hint" Text="如无特殊需求，建议保持默认。所选算法排在协商首位，服务器不支持时按默认顺序协商。"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding CipherChoices}" SelectedItem="{Binding Cipher}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="Cipher 算法"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="密钥交换算法"/><TextBlock Classes="hint" Text="如无特殊需求，建议保持默认。所选算法排在协商首位，服务器不支持时按默认顺序协商。"/></StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding KeyExchangeChoices}" SelectedItem="{Binding KeyExchange}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="密钥交换算法"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- 初始化 -->
+          <Border Classes="section" Name="SectionInit">
+            <StackPanel>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding HasFiles}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="默认路径"/><TextBlock Classes="hint" Text="文件区打开时定位的绝对路径；留空使用登录目录。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding DefaultPath}" PlaceholderText="/home/user" VerticalAlignment="Center" AutomationProperties.Name="默认路径"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding HasTerminal}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding HasTerminal}">
+                <StackPanel Classes="label" VerticalAlignment="Top"><TextBlock Classes="label" Text="初始执行"/><TextBlock Classes="hint" Text="终端打开后写入并执行，每行一条命令。会出现在终端历史和堡垒机审计记录中。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding InitialScript}" AcceptsReturn="True" TextWrapping="NoWrap" Height="96" Margin="0,8" PlaceholderText="cd /data/app" FontFamily="Menlo, Consolas, monospace" AutomationProperties.Name="初始执行"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding HasTerminal}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding HasTerminal}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="保活命令"/><TextBlock Classes="hint" Text="按保活周期写入终端执行；留空不发送。"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding KeepAliveCommand}" VerticalAlignment="Center" AutomationProperties.Name="保活命令"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding HasTerminal}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding HasTerminal}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="保活周期（毫秒）"/></StackPanel>
+                <TextBox Grid.Column="1" Text="{Binding KeepAliveMs}" PlaceholderText="60000" VerticalAlignment="Center" AutomationProperties.Name="保活周期"/>
+              </Grid>
+              <Border Classes="rule" IsVisible="{Binding IsSsh}"/>
+              <Grid Classes="row" ColumnDefinitions="*,270" IsVisible="{Binding IsSsh}">
+                <StackPanel Classes="label"><TextBlock Classes="label" Text="会话环境变量"/><TextBlock Classes="hint" Text="打开终端时通过 SSH 协议发送，不写入终端；服务器只接受其 AcceptEnv 允许的变量名，未接受时会提示。值以明文保存在本机连接库，请勿填写密码或令牌；导出连接时不包含。"/></StackPanel>
+                <Button Grid.Column="1" Classes="secondary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalAlignment="Center" Command="{Binding AddEnvironmentCommand}" AutomationProperties.Name="添加环境变量">
+                  <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="11" Height="11"/><TextBlock Text="添加环境变量"/></StackPanel>
+                </Button>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding EnvironmentRows}" IsVisible="{Binding IsSsh}" Margin="0,0,0,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:EnvironmentRow">
+                    <Grid ColumnDefinitions="*,8,2*,Auto" Height="36">
+                      <TextBox Text="{Binding Name}" PlaceholderText="变量名，例如 LANG" VerticalAlignment="Center" FontFamily="Menlo, Consolas, monospace" AutomationProperties.Name="环境变量名"/>
+                      <TextBox Grid.Column="2" Text="{Binding Value}" PlaceholderText="值" VerticalAlignment="Center" FontFamily="Menlo, Consolas, monospace" AutomationProperties.Name="环境变量值"/>
+                      <Button Grid.Column="3" Classes="pane-icon" Margin="4,0,0,0" ToolTip.Tip="移除" Command="{Binding $parent[Window].((vm:ConnectionEditorViewModel)DataContext).RemoveEnvironmentCommand}" CommandParameter="{Binding}" AutomationProperties.Name="移除环境变量"><c:StrokeIcon Data="{StaticResource Icon.Close}" Width="12" Height="12"/></Button>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</Window>

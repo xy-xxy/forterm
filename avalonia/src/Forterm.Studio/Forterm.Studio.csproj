@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- The xshell/xftp entries start "Forterm(.exe)" next to themselves. -->
+    <AssemblyName>Forterm</AssemblyName>
+    <RootNamespace>Forterm.Studio</RootNamespace>
+    <Version>0.4.0-alpha.8</Version>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Forterm.Core/Forterm.Core.csproj" />
+    <ProjectReference Include="../../vendor/XTerm.NET/XTerm.NET.csproj" />
+    <ProjectReference Include="../../vendor/Iciclecreek.Terminal/Iciclecreek.Avalonia.Terminal.csproj" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Syntax/*.xshd" LogicalName="Forterm.Studio.Syntax.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Forterm.Studio.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,415 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Forterm.Studio.ViewModels"
+             xmlns:c="using:Forterm.Studio.Controls"
+             xmlns:lib="using:Forterm.Studio.Library"
+             x:Class="Forterm.Studio.Views.WorkspaceView"
+             x:DataType="vm:WorkspaceViewModel">
+  <DockPanel>
+    <!-- Status line: endpoint and connection state (useful when a controller launch fails). -->
+    <Border DockPanel.Dock="Bottom" Height="24" Background="{DynamicResource St.Window}" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,1,0,0">
+      <DockPanel Margin="10,0" HorizontalSpacing="10">
+        <Button DockPanel.Dock="Right" Classes="status-chip" IsVisible="{Binding ShowsIdle}" Command="{Binding ToggleIdleCommand}" ToolTip.Tip="{Binding IdleTip}" AutomationProperties.Name="空闲保活">
+          <TextBlock Text="{Binding IdleText}" FontSize="11"/>
+        </Button>
+      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+        <Border Background="{DynamicResource St.AccentSoft}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ProtocolLabel}" FontSize="11" Foreground="{DynamicResource St.Accent}" VerticalAlignment="Center"/>
+        </Border>
+        <TextBlock Text="{Binding Endpoint}" FontSize="11.5" Classes="dim" VerticalAlignment="Center"/>
+        <TextBlock Name="StatusText" Text="{Binding Status}" FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+      </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Narrow rail: toggle the three columns. -->
+    <Border DockPanel.Dock="Left" Width="38" Background="{DynamicResource St.Window}" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,1,0">
+      <StackPanel Spacing="4" Margin="0,8,0,0" HorizontalAlignment="Center">
+        <Button Classes="rail" Classes.on="{Binding ShowFiles}" Command="{Binding ToggleFilesCommand}" IsEnabled="{Binding CanShowFiles}"
+                ToolTip.Tip="文件工作区" AutomationProperties.Name="文件工作区">
+          <c:StrokeIcon Data="{StaticResource Icon.FolderOutline}" Thickness="1.8"/>
+        </Button>
+        <Button Classes="rail" Classes.on="{Binding ShowTerminal}" Command="{Binding ToggleTerminalCommand}" IsEnabled="{Binding CanShowTerminal}"
+                ToolTip.Tip="终端" AutomationProperties.Name="终端">
+          <c:StrokeIcon Data="{StaticResource Icon.Terminal}" Thickness="1.8"/>
+        </Button>
+        <Button Classes="rail" Classes.on="{Binding ShowMonitor}" Command="{Binding ToggleMonitorCommand}" IsEnabled="{Binding CanShowMonitor}"
+                ToolTip.Tip="监控" AutomationProperties.Name="监控">
+          <c:StrokeIcon Data="{StaticResource Icon.Activity}" Thickness="1.8"/>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <Grid Name="Columns" ColumnDefinitions="320,4,*,4,280">
+      <!-- ===== Files ===== -->
+      <c:StudioPane Name="FilesPane" Grid.Column="0" CloseCommand="{Binding HideFilesCommand}">
+        <c:StudioPane.Header>
+          <Border Classes="pane-chip">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Classes="chip-text" Text="文件工作区"/>
+              <Button Classes="chip-close" Command="{Binding HideFilesCommand}" ToolTip.Tip="收起此栏">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
+              </Button>
+            </StackPanel>
+          </Border>
+        </c:StudioPane.Header>
+        <DockPanel>
+          <!-- toolbar -->
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,2,6,0">
+            <StackPanel Orientation="Horizontal" Spacing="1">
+              <Button Classes="flat" Command="{Binding RefreshDirectoryCommand}" ToolTip.Tip="刷新当前目录" AutomationProperties.Name="刷新文件">
+                <c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="14" Height="14"/>
+              </Button>
+              <Button Classes="flat" Command="{Binding UploadFilesCommand}" ToolTip.Tip="上传文件到当前目录" AutomationProperties.Name="上传文件">
+                <c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="14" Height="14"/>
+              </Button>
+              <Button Classes="flat" Command="{Binding NewFolderCommand}" ToolTip.Tip="新建文件夹" AutomationProperties.Name="新建文件夹">
+                <c:StrokeIcon Data="{StaticResource Icon.FolderPlus}" Width="14" Height="14" Thickness="1.8"/>
+              </Button>
+              <Button Classes="flat" Command="{Binding NewFileCommand}" ToolTip.Tip="新建文件" AutomationProperties.Name="新建文件">
+                <c:StrokeIcon Data="{StaticResource Icon.FilePlus}" Width="14" Height="14" Thickness="1.8"/>
+              </Button>
+              <Button Classes="flat" Command="{Binding CdToTerminalCommand}" IsVisible="{Binding CanUseTerminalFromFiles}" ToolTip.Tip="执行 CD 命令到终端" AutomationProperties.Name="执行 CD 命令到终端">
+                <c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="14" Height="14" Thickness="1.8"/>
+              </Button>
+              <Button Name="FileViewButton" Classes="flat" ToolTip.Tip="排序和显示" AutomationProperties.Name="排序和显示">
+                <c:StrokeIcon Data="{StaticResource Icon.Sort}" Width="14" Height="14" Thickness="1.8"/>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedLeft"/></Button.Flyout>
+              </Button>
+            </StackPanel>
+            <Button Grid.Column="1" Classes="flat" ToolTip.Tip="传输管理" AutomationProperties.Name="传输管理" IsEnabled="{Binding Transfers, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <Panel>
+                <c:StrokeIcon Data="{StaticResource Icon.Transfer}" Width="15" Height="15"/>
+                <Border Classes="badge" IsVisible="{Binding Transfers.HasActive, FallbackValue=False}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-7,-9,0">
+                  <TextBlock Text="{Binding Transfers.ActiveCount, FallbackValue=0}"/>
+                </Border>
+              </Panel>
+              <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedRight">
+                  <Border Width="400" Padding="4" DataContext="{Binding Transfers}" x:DataType="vm:TransferListViewModel">
+                    <DockPanel>
+                      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="4,2,2,8">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <c:StrokeIcon Data="{StaticResource Icon.Transfer}" Width="14" Height="14" Brush="{DynamicResource St.Accent}"/>
+                          <TextBlock Text="传输管理" Classes="title" FontSize="13"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="12,0,0,0">
+                          <Button Classes="flat" Classes.on="{Binding FilterAll}" Command="{Binding ShowAllCommand}" Padding="6,2">
+                            <TextBlock FontSize="11.5"><Run Text="全部 "/><Run Text="{Binding AllCount}"/></TextBlock>
+                          </Button>
+                          <Button Classes="flat" Command="{Binding ShowUploadsCommand}" Padding="6,2" ToolTip.Tip="上传">
+                            <StackPanel Orientation="Horizontal" Spacing="3"><c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="11" Height="11"/><TextBlock Text="{Binding UploadCount}" FontSize="11.5"/></StackPanel>
+                          </Button>
+                          <Button Classes="flat" Command="{Binding ShowDownloadsCommand}" Padding="6,2" ToolTip.Tip="下载">
+                            <StackPanel Orientation="Horizontal" Spacing="3"><c:StrokeIcon Data="{StaticResource Icon.Download}" Width="11" Height="11"/><TextBlock Text="{Binding DownloadCount}" FontSize="11.5"/></StackPanel>
+                          </Button>
+                        </StackPanel>
+                        <Button Grid.Column="2" Classes="flat" Command="{Binding ClearFinishedCommand}" ToolTip.Tip="清除已结束的记录" AutomationProperties.Name="清除已结束">
+                          <c:StrokeIcon Data="{StaticResource Icon.Trash}" Width="13" Height="13"/>
+                        </Button>
+                      </Grid>
+                      <Panel MinHeight="120">
+                        <ScrollViewer MaxHeight="360">
+                          <ItemsControl ItemsSource="{Binding Visible}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate DataType="vm:TransferItemViewModel">
+                                <Border Padding="6,6" Margin="0,0,0,2" CornerRadius="5" Background="{DynamicResource St.Card}">
+                                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                    <Panel Grid.RowSpan="2" Margin="0,1,8,0" VerticalAlignment="Top">
+                                      <c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="14" Height="14" IsVisible="{Binding IsUpload}" Brush="{DynamicResource St.Accent}"/>
+                                      <c:StrokeIcon Data="{StaticResource Icon.Download}" Width="14" Height="14" IsVisible="{Binding IsDownload}" Brush="#4D9DE0"/>
+                                      <c:StrokeIcon Data="{StaticResource Icon.Sliders}" Width="14" Height="14" IsVisible="{Binding IsOperation}"/>
+                                    </Panel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="12.5"/>
+                                    <Button Grid.Column="2" Grid.RowSpan="2" Classes="flat" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" ToolTip.Tip="取消" VerticalAlignment="Top">
+                                      <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="11" Height="11"/>
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Grid.Row="1" FontSize="11" Classes="dim" TextTrimming="CharacterEllipsis">
+                                      <Run Text="{Binding StateText}"/><Run Text="  "/><Run Text="{Binding AmountText}"/>
+                                    </TextBlock>
+                                    <ProgressBar Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Classes="thin" Margin="0,5,0,0" Minimum="0" Maximum="100" Value="{Binding Percent}" IsVisible="{Binding HasProgress}"/>
+                                  </Grid>
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </ScrollViewer>
+                        <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                          <c:StrokeIcon Data="{StaticResource Icon.Transfer}" Width="26" Height="26" Opacity="0.4" HorizontalAlignment="Center"/>
+                          <TextBlock Text="暂无传输任务" Classes="dim" FontSize="12"/>
+                        </StackPanel>
+                      </Panel>
+                    </DockPanel>
+                  </Border>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+          </Grid>
+
+          <!-- path bar -->
+          <ScrollViewer DockPanel.Dock="Top" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="6,2,6,4">
+            <StackPanel Orientation="Horizontal">
+              <Button Classes="crumb" Content="/" Command="{Binding NavigateRootCommand}" ToolTip.Tip="根目录"/>
+              <ItemsControl ItemsSource="{Binding PathSegments}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:PathSegment">
+                    <StackPanel Orientation="Horizontal" Spacing="1">
+                      <c:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="9" Height="9" Thickness="2.2" Opacity="0.6"/>
+                      <Button Classes="crumb" Content="{Binding Name}" FontSize="12.5" ToolTip.Tip="{Binding FullPath}"
+                              Command="{Binding $parent[UserControl].((vm:WorkspaceViewModel)DataContext).NavigateCommand}" CommandParameter="{Binding}"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- action result -->
+          <Border DockPanel.Dock="Bottom" Classes="reveal" IsVisible="{Binding HasFileNotice}" Background="{DynamicResource St.Card}" Padding="8,5" Margin="6,0,6,6" CornerRadius="5">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Classes="flat" Padding="2" Command="{Binding DismissFileNoticeCommand}" VerticalAlignment="Top">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+              </Button>
+              <TextBlock Text="{Binding FileNotice}" TextWrapping="Wrap" FontSize="11.5"/>
+            </DockPanel>
+          </Border>
+
+          <Panel>
+            <TreeView Name="FileTree" Classes="files" ItemsSource="{Binding FileRoots}" AutomationProperties.Name="远程文件树">
+              <TreeView.Styles>
+                <Style Selector="TreeViewItem" x:DataType="vm:FileNodeViewModel">
+                  <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                  <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                </Style>
+              </TreeView.Styles>
+              <TreeView.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="刷新" Command="{Binding RefreshDirectoryCommand}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="13" Height="13"/></MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="上传">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="13" Height="13"/></MenuItem.Icon>
+                    <MenuItem Header="上传文件" Command="{Binding UploadFilesCommand}"/>
+                    <MenuItem Header="上传文件夹" Command="{Binding UploadFolderCommand}"/>
+                  </MenuItem>
+                  <MenuItem Header="新建">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.FilePlus}" Width="13" Height="13"/></MenuItem.Icon>
+                    <MenuItem Header="新建文件" Command="{Binding NewFileCommand}"/>
+                    <MenuItem Header="新建文件夹" Command="{Binding NewFolderCommand}"/>
+                  </MenuItem>
+                  <MenuItem Header="打开方式" IsVisible="{Binding SelectedIsFile}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Edit}" Width="13" Height="13"/></MenuItem.Icon>
+                    <MenuItem Header="内置编辑器" Command="{Binding OpenEditorCommand}"/>
+                  </MenuItem>
+                  <MenuItem Header="下载" Command="{Binding DownloadCommand}" IsVisible="{Binding HasSelection}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Download}" Width="13" Height="13"/></MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="复制路径" Command="{Binding CopyPathCommand}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="终端" IsVisible="{Binding CanUseTerminalFromFiles}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="13" Height="13"/></MenuItem.Icon>
+                    <MenuItem Header="执行 CD 命令到终端" Command="{Binding CdToTerminalCommand}"/>
+                    <MenuItem Header="新建终端到当前目录" Command="{Binding NewTerminalHereCommand}"/>
+                  </MenuItem>
+                  <MenuItem Header="其他" IsVisible="{Binding HasSelection}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.More}" Width="13" Height="13" Thickness="2.6"/></MenuItem.Icon>
+                    <MenuItem Header="重命名" Command="{Binding RenameCommand}"/>
+                    <MenuItem Header="复制文件名" Command="{Binding CopyNameCommand}"/>
+                    <MenuItem Header="修改权限" Command="{Binding PermissionsCommand}"/>
+                    <MenuItem Header="压缩" Command="{Binding CompressCommand}" IsVisible="{Binding CanCompress}"/>
+                    <MenuItem Header="{Binding DownloadHereHeader}" Command="{Binding DownloadToDesktopCommand}"/>
+                  </MenuItem>
+                  <Separator IsVisible="{Binding HasSelection}"/>
+                  <MenuItem Header="删除" Classes="danger" Command="{Binding DeleteCommand}" IsVisible="{Binding HasSelection}">
+                    <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Trash}" Width="13" Height="13" Brush="{DynamicResource St.Danger}"/></MenuItem.Icon>
+                  </MenuItem>
+                </ContextMenu>
+              </TreeView.ContextMenu>
+              <TreeView.ItemTemplate>
+                <TreeDataTemplate DataType="vm:FileNodeViewModel" ItemsSource="{Binding Children}">
+                  <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Height="24" ToolTip.Tip="{Binding Tip}" ToolTip.ShowDelay="700">
+                    <Panel Margin="0,0,6,0">
+                      <c:StrokeIcon Data="{StaticResource Icon.FolderFill}" Filled="True" Brush="{DynamicResource St.Folder}" IsVisible="{Binding IsDirectory}" Width="15" Height="15" VerticalAlignment="Center"/>
+                      <c:StrokeIcon Data="{StaticResource Icon.File}" IsVisible="{Binding IsFile}" Width="15" Height="15" Thickness="1.6" VerticalAlignment="Center"/>
+                    </Panel>
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Classes.dim="{Binding IsPlaceholder}"/>
+                    <c:StrokeIcon Grid.Column="2" Data="{StaticResource Icon.Link}" IsVisible="{Binding IsLink}" Width="11" Height="11" Margin="6,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" ToolTip.Tip="符号链接（不跟随）"/>
+                    <TextBlock Grid.Column="3" Classes="file-size" Text="{Binding SizeText}"/>
+                    <TextBlock Grid.Column="4" Classes="file-time" Text="{Binding TimeText}"/>
+                  </Grid>
+                </TreeDataTemplate>
+              </TreeView.ItemTemplate>
+            </TreeView>
+            <Border Name="DropHint" Classes="drop" IsVisible="False" IsHitTestVisible="False">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Margin="12">
+                <c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="26" Height="26" Brush="{DynamicResource St.Accent}" HorizontalAlignment="Center"/>
+                <TextBlock Text="松开上传到" Foreground="White" HorizontalAlignment="Center"/>
+                <TextBlock Name="DropTarget" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <StackPanel IsVisible="{Binding HasFileMessage}" Margin="14,8" Spacing="10">
+              <TextBlock Text="{Binding FileMessage}" TextWrapping="Wrap" Classes="dim"/>
+              <Button Classes="secondary" Content="输入绝对目录" Command="{Binding EnterDirectoryCommand}" IsVisible="{Binding NeedsDirectory}" HorizontalAlignment="Left"/>
+            </StackPanel>
+          </Panel>
+        </DockPanel>
+      </c:StudioPane>
+
+      <Thumb Name="LeftSplitter" Classes="splitter" Grid.Column="1" Cursor="SizeWestEast" ToolTip.Tip="拖动调整宽度，双击恢复默认"/>
+
+      <!-- ===== Terminal tabs ===== -->
+      <c:StudioPane Name="TerminalPane" Grid.Column="2" CloseCommand="{Binding HideTerminalCommand}">
+        <c:StudioPane.Header>
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <ItemsControl ItemsSource="{Binding CenterTabs}">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:CenterTabViewModel">
+                  <Button Classes="chip-tab" Command="{Binding ActivateCommand}" AutomationProperties.Name="{Binding Title}">
+                    <Border Classes="pane-chip" Classes.inactive="{Binding !IsActive}">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Ellipse Classes="pulse" Width="7" Height="7" Fill="{DynamicResource St.Danger}" IsVisible="{Binding IsRecording}" VerticalAlignment="Center" ToolTip.Tip="正在记录会话"/>
+                        <TextBlock Classes="chip-text" Text="{Binding Title}" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                        <Button Classes="chip-close" Command="{Binding CloseCommand}" ToolTip.Tip="关闭" AutomationProperties.Name="关闭页签">
+                          <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Classes="pane-icon" Command="{Binding AddTerminalCommand}" IsVisible="{Binding CanAddTerminal}" ToolTip.Tip="新建终端（同一连接）" AutomationProperties.Name="新建终端">
+              <c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="12" Height="12"/>
+            </Button>
+            <Button Name="QuickButton" Classes="pane-icon" IsVisible="{Binding IsTerminalShown}" ToolTip.Tip="快速命令" AutomationProperties.Name="快速命令">
+              <c:StrokeIcon Data="{StaticResource Icon.Bolt}" Width="13" Height="13" Thickness="1.8"/>
+              <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedLeft">
+                  <DockPanel Width="320" Margin="4">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                      <TextBox Name="QuickFilterBox" Text="{Binding QuickFilter}" PlaceholderText="搜索快速命令" Padding="8,5" AutomationProperties.Name="搜索快速命令"/>
+                      <Button Name="QuickManage" Grid.Column="1" Classes="flat" Margin="6,0,0,0" Command="{Binding ManageQuickCommandsCommand}" ToolTip.Tip="管理快速命令" AutomationProperties.Name="管理快速命令">
+                        <c:StrokeIcon Data="{StaticResource Icon.Settings}" Width="14" Height="14" Thickness="1.6"/>
+                      </Button>
+                    </Grid>
+                    <Panel MinHeight="60">
+                      <ScrollViewer MaxHeight="360">
+                        <ItemsControl Name="QuickList" ItemsSource="{Binding VisibleQuickCommands}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="lib:QuickCommand">
+                              <Button Classes="flat quick-item" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,6" AutomationProperties.Name="{Binding Name}"
+                                      Command="{Binding $parent[UserControl].((vm:WorkspaceViewModel)DataContext).RunQuickCommand}" CommandParameter="{Binding}">
+                                <StackPanel Spacing="2">
+                                  <TextBlock Text="{Binding Name}" FontSize="12.5" TextTrimming="CharacterEllipsis"/>
+                                  <TextBlock Text="{Binding Preview}" FontSize="11" Classes="dim" FontFamily="Menlo, Consolas, monospace" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </ScrollViewer>
+                      <TextBlock Text="{Binding QuickCommandsHint}" Classes="dim" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                    </Panel>
+                  </DockPanel>
+                </Flyout>
+              </Button.Flyout>
+            </Button>
+            <Button Classes="pane-icon" Command="{Binding FindInTerminalCommand}" IsVisible="{Binding IsTerminalShown}" ToolTip.Tip="在终端中查找" AutomationProperties.Name="在终端中查找">
+              <c:StrokeIcon Data="{StaticResource Icon.Search}" Width="13" Height="13" Thickness="1.8"/>
+            </Button>
+          </StackPanel>
+        </c:StudioPane.Header>
+        <Panel Name="CentrePanel" Background="{DynamicResource St.TerminalBack}">
+          <Panel.ContextMenu>
+            <ContextMenu Name="TerminalMenu">
+              <MenuItem Name="MenuCopy" Header="复制" Command="{Binding CopyTerminalCommand}" IsEnabled="{Binding HasTerminalSelection}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Name="MenuPaste" Header="粘贴" Command="{Binding PasteTerminalCommand}" IsEnabled="{Binding IsTerminalLive}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Paste}" Width="13" Height="13" Thickness="1.6"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="全选" Command="{Binding SelectAllTerminalCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.SelectAll}" Width="13" Height="13" Thickness="1.6"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Name="MenuFind" Header="查找…" Command="{Binding FindInTerminalCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Search}" Width="13" Height="13"/></MenuItem.Icon>
+              </MenuItem>
+              <Separator/>
+              <MenuItem Name="MenuQuick" Header="快速命令" IsEnabled="{Binding IsTerminalLive}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Bolt}" Width="13" Height="13" Thickness="1.8"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="{Binding RecordHeader}" Command="{Binding RecordTerminalCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Record}" Width="13" Height="13" Brush="{DynamicResource St.Danger}"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="{Binding IdleHeader}" Command="{Binding ToggleIdleCommand}" IsVisible="{Binding CanIdle}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Activity}" Width="13" Height="13" Thickness="1.8"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="新建终端" Command="{Binding AddTerminalCommand}" IsVisible="{Binding CanAddTerminal}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="13" Height="13"/></MenuItem.Icon>
+              </MenuItem>
+              <Separator/>
+              <MenuItem Header="滚动到底部" Command="{Binding ScrollToBottomCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.ArrowDown}" Width="13" Height="13"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="清空显示（含回滚）" Command="{Binding ClearTerminalCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Eraser}" Width="13" Height="13" Thickness="1.6"/></MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="终端设置…" Command="{Binding TerminalSettingsCommand}">
+                <MenuItem.Icon><c:StrokeIcon Data="{StaticResource Icon.Settings}" Width="13" Height="13" Thickness="1.6"/></MenuItem.Icon>
+              </MenuItem>
+            </ContextMenu>
+          </Panel.ContextMenu>
+          <ContentControl Content="{Binding ActiveContent}" Padding="6,2,0,0"/>
+          <!-- find in the shown terminal -->
+          <Border Name="FindBar" Classes="reveal" IsVisible="{Binding Find.IsOpen}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,24,0" Padding="6,5" CornerRadius="6"
+                  Background="{DynamicResource St.Menu}" BorderBrush="{DynamicResource St.Line}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBox Name="FindBox" Text="{Binding Find.Text}" Width="190" PlaceholderText="查找" Padding="8,4" VerticalContentAlignment="Center" AutomationProperties.Name="查找内容"/>
+              <TextBlock Text="{Binding Find.Summary}" FontSize="11.5" Classes="dim" VerticalAlignment="Center" MinWidth="52" TextAlignment="Center" AutomationProperties.Name="查找结果"/>
+              <ToggleButton Content="Aa" IsChecked="{Binding Find.CaseSensitive}" Padding="6,3" MinHeight="0" FontSize="11.5" ToolTip.Tip="区分大小写" AutomationProperties.Name="区分大小写"/>
+              <Button Classes="pane-icon" Command="{Binding Find.PreviousCommand}" ToolTip.Tip="上一个（Enter）" AutomationProperties.Name="上一个匹配">
+                <c:StrokeIcon Data="{StaticResource Icon.ArrowUp}" Width="12" Height="12"/>
+              </Button>
+              <Button Classes="pane-icon" Command="{Binding Find.NextCommand}" ToolTip.Tip="下一个（Shift+Enter）" AutomationProperties.Name="下一个匹配">
+                <c:StrokeIcon Data="{StaticResource Icon.ArrowDown}" Width="12" Height="12"/>
+              </Button>
+              <Button Classes="pane-icon" Command="{Binding Find.CloseCommand}" ToolTip.Tip="关闭（Esc）" AutomationProperties.Name="关闭查找">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="11" Height="11"/>
+              </Button>
+            </StackPanel>
+          </Border>
+          <Border Background="{DynamicResource St.Terminal}" IsVisible="{Binding ShowTerminalOverlay}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="520">
+              <c:BusyRing Width="30" Height="30" Brush="{DynamicResource St.Accent}" HorizontalAlignment="Center" IsVisible="{Binding IsBusy}" IsActive="{Binding IsBusy}"/>
+              <c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="28" Height="28" HorizontalAlignment="Center" IsVisible="{Binding !IsBusy}"/>
+              <TextBlock Text="{Binding Status}" TextWrapping="Wrap" TextAlignment="Center" Classes="dim"/>
+            </StackPanel>
+          </Border>
+        </Panel>
+      </c:StudioPane>
+
+      <Thumb Name="RightSplitter" Classes="splitter" Grid.Column="3" Cursor="SizeWestEast" ToolTip.Tip="拖动调整宽度，双击恢复默认"/>
+
+      <!-- ===== Monitor ===== -->
+      <c:StudioPane Name="MonitorPane" Grid.Column="4" CloseCommand="{Binding HideMonitorCommand}">
+        <c:StudioPane.Header>
+          <Border Classes="pane-chip">
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Classes="chip-text" Text="监控"/>
+              <Button Classes="chip-close" Command="{Binding HideMonitorCommand}" ToolTip.Tip="收起此栏">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
+              </Button>
+            </StackPanel>
+          </Border>
+        </c:StudioPane.Header>
+        <ContentControl Content="{Binding Monitor}"/>
+      </c:StudioPane>
+
+      <TextBlock Name="AllHidden" Grid.ColumnSpan="5" IsVisible="False" Classes="dim"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" Text="所有栏位已收起，可在左侧栏重新打开。"/>
+    </Grid>
+  </DockPanel>
+</UserControl>

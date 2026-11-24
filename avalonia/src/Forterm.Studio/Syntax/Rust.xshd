@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Rust" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>//</Begin></Span>
+    <Span color="Comment" multiline="true"><Begin>/\*</Begin><End>\*/</End></Span>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/></RuleSet></Span>
+    <Rule color="Type">&#x27;[a-z_]\w*\b(?!&#x27;)</Rule>
+    <Rule color="String">&#x27;(\\.|[^&#x27;\\])&#x27;</Rule>
+    <Keywords color="Keyword"><Word>as</Word><Word>async</Word><Word>await</Word><Word>break</Word><Word>const</Word><Word>continue</Word><Word>crate</Word><Word>dyn</Word><Word>else</Word><Word>enum</Word><Word>extern</Word><Word>fn</Word><Word>for</Word><Word>if</Word><Word>impl</Word><Word>in</Word><Word>let</Word><Word>loop</Word><Word>match</Word><Word>mod</Word><Word>move</Word><Word>mut</Word><Word>pub</Word><Word>ref</Word><Word>return</Word><Word>self</Word><Word>Self</Word><Word>static</Word><Word>struct</Word><Word>super</Word><Word>trait</Word><Word>type</Word><Word>unsafe</Word><Word>use</Word><Word>where</Word><Word>while</Word></Keywords>
+    <Keywords color="Type"><Word>bool</Word><Word>char</Word><Word>f32</Word><Word>f64</Word><Word>i8</Word><Word>i16</Word><Word>i32</Word><Word>i64</Word><Word>i128</Word><Word>isize</Word><Word>str</Word><Word>u8</Word><Word>u16</Word><Word>u32</Word><Word>u64</Word><Word>u128</Word><Word>usize</Word><Word>String</Word><Word>Vec</Word><Word>Option</Word><Word>Result</Word><Word>Box</Word><Word>Rc</Word><Word>Arc</Word><Word>HashMap</Word></Keywords>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word><Word>None</Word><Word>Some</Word><Word>Ok</Word><Word>Err</Word></Keywords>
+    <Rule color="Function">\b[a-z_]\w*!?(?=\()|\b[a-z_]\w*!</Rule>
+    <Rule color="Comment">\#!?\[[^\]]{0,200}\]</Rule>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

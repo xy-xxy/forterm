@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:Forterm.Studio.Views.Dialogs"
+        xmlns:c="using:Forterm.Studio.Controls"
+        x:Class="Forterm.Studio.Views.Dialogs.HostKeyDialog"
+        x:DataType="d:HostKeyDialogModel"
+        Title="主机指纹" Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        WindowDecorations="BorderOnly"
+        Background="{DynamicResource St.Dialog}">
+  <DockPanel>
+    <Grid Name="Header" DockPanel.Dock="Top" Height="40" Background="Transparent" ColumnDefinitions="40,*,40">
+      <TextBlock Grid.Column="1" Text="{Binding Title}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="title" FontSize="13"/>
+      <Button Grid.Column="2" Classes="flat" Name="CloseButton" HorizontalAlignment="Center" AutomationProperties.Name="拒绝">
+        <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="13" Height="13"/>
+      </Button>
+    </Grid>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="16,4,16,16">
+      <Button Classes="secondary" Name="RejectButton" Content="拒绝连接"/>
+      <Button Classes="primary" Name="TrustButton" Content="{Binding TrustText}"/>
+    </StackPanel>
+    <Border Margin="16,0,16,12" Padding="14" Background="{DynamicResource St.DialogSection}" CornerRadius="6">
+      <StackPanel Spacing="10">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <c:StrokeIcon Data="{StaticResource Icon.Shield}" Brush="{DynamicResource St.Accent}" IsVisible="{Binding !Changed}"/>
+          <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Danger}" IsVisible="{Binding Changed}"/>
+          <TextBlock Text="{Binding Endpoint}" VerticalAlignment="Center"/>
+        </StackPanel>
+        <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" Classes="dim" FontSize="12"/>
+        <StackPanel Spacing="4" IsVisible="{Binding Changed}">
+          <TextBlock Text="之前信任的指纹" FontSize="12" Classes="dim"/>
+          <SelectableTextBlock Text="{Binding Previous}" TextWrapping="Wrap" FontSize="12"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding CurrentLabel}" FontSize="12" Classes="dim"/>
+          <SelectableTextBlock Text="{Binding Current}" TextWrapping="Wrap" FontSize="12.5"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </DockPanel>
+</Window>

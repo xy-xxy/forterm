@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Shell" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>(?&lt;=^|[\s;&amp;|(])\#</Begin></Span>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/><Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule>
+    <Rule color="Function">^\s{0,200}(function\s{1,20})?[A-Za-z_][\w-]{0,100}\s{0,20}(?=\(\))</Rule>
+    <Rule color="Key">(?&lt;=^|[\s;])(export\s{1,20}|local\s{1,20}|readonly\s{1,20})?[A-Za-z_]\w*(?=\+?=)</Rule>
+    <Keywords color="Keyword"><Word>if</Word><Word>then</Word><Word>elif</Word><Word>else</Word><Word>fi</Word><Word>for</Word><Word>while</Word><Word>until</Word><Word>do</Word><Word>done</Word><Word>case</Word><Word>esac</Word><Word>in</Word><Word>select</Word><Word>function</Word><Word>return</Word><Word>break</Word><Word>continue</Word><Word>exit</Word><Word>local</Word><Word>export</Word><Word>readonly</Word><Word>declare</Word><Word>typeset</Word><Word>unset</Word><Word>shift</Word><Word>trap</Word><Word>set</Word><Word>source</Word><Word>alias</Word><Word>eval</Word><Word>exec</Word><Word>time</Word></Keywords>
+    <Keywords color="Function"><Word>echo</Word><Word>printf</Word><Word>cd</Word><Word>ls</Word><Word>cat</Word><Word>grep</Word><Word>egrep</Word><Word>awk</Word><Word>sed</Word><Word>cut</Word><Word>sort</Word><Word>uniq</Word><Word>head</Word><Word>tail</Word><Word>find</Word><Word>xargs</Word><Word>tar</Word><Word>gzip</Word><Word>gunzip</Word><Word>zip</Word><Word>unzip</Word><Word>cp</Word><Word>mv</Word><Word>rm</Word><Word>mkdir</Word><Word>rmdir</Word><Word>touch</Word><Word>ln</Word><Word>chmod</Word><Word>chown</Word><Word>chgrp</Word><Word>ps</Word><Word>kill</Word><Word>pkill</Word><Word>killall</Word><Word>top</Word><Word>df</Word><Word>du</Word><Word>free</Word><Word>uname</Word><Word>hostname</Word><Word>date</Word><Word>sleep</Word><Word>wait</Word><Word>test</Word><Word>read</Word><Word>curl</Word><Word>wget</Word><Word>ssh</Word><Word>scp</Word><Word>sftp</Word><Word>rsync</Word><Word>systemctl</Word><Word>service</Word><Word>journalctl</Word><Word>docker</Word><Word>kubectl</Word><Word>git</Word><Word>make</Word><Word>gcc</Word><Word>python</Word><Word>python3</Word><Word>pip</Word><Word>node</Word><Word>npm</Word><Word>java</Word><Word>mysql</Word><Word>psql</Word><Word>redis-cli</Word><Word>nginx</Word><Word>sudo</Word><Word>su</Word><Word>id</Word><Word>who</Word><Word>whoami</Word><Word>env</Word><Word>tee</Word><Word>wc</Word><Word>tr</Word><Word>diff</Word><Word>ping</Word><Word>ip</Word><Word>ifconfig</Word><Word>netstat</Word><Word>ss</Word><Word>iptables</Word><Word>firewall-cmd</Word><Word>mount</Word><Word>umount</Word><Word>crontab</Word><Word>yum</Word><Word>dnf</Word><Word>apt</Word><Word>apt-get</Word><Word>rpm</Word><Word>dpkg</Word><Word>openssl</Word><Word>base64</Word><Word>md5sum</Word><Word>sha256sum</Word><Word>basename</Word><Word>dirname</Word><Word>realpath</Word><Word>readlink</Word><Word>stat</Word><Word>file</Word><Word>which</Word><Word>type</Word></Keywords>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word></Keywords>
+    <Rule color="Type">(?&lt;=\s)--?[A-Za-z][\w-]*</Rule>
+    <Rule color="Operator">&amp;&amp;|\|\||;;|[|&amp;&lt;&gt;]|\[\[|\]\]</Rule>
+    <Rule color="Function">\b[a-z][a-z0-9+.-]{1,10}://[^\s&quot;\&#x27;&lt;&gt;)]+</Rule>
+    <Rule color="Constant">\b(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5}|/\d{1,2})?\b</Rule>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers><OutputType>Exe</OutputType><AssemblyName>Forterm.Diagnose</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include="../Forterm.Core/Forterm.Core.csproj"/></ItemGroup></Project>

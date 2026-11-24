@@ -1,0 +1,75 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 暗夜 (default) and 明亮. Colours sampled from the reference screenshots; the other
+       background presets arrive with the settings page (phase 6). -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="St.Window" Color="#191919"/>
+      <SolidColorBrush x:Key="St.TitleBar" Color="#2B2B2B"/>
+      <SolidColorBrush x:Key="St.TitleBarText" Color="#8C8C8C"/>
+      <SolidColorBrush x:Key="St.TitleBarHover" Color="#2E2E2E"/>
+      <SolidColorBrush x:Key="St.TerminalBack" Color="#00161C"/>
+      <SolidColorBrush x:Key="St.Panel" Color="#191919"/>
+      <SolidColorBrush x:Key="St.Card" Color="#252525"/>
+      <SolidColorBrush x:Key="St.Hover" Color="#2E2E2E"/>
+      <SolidColorBrush x:Key="St.Pressed" Color="#363636"/>
+      <SolidColorBrush x:Key="St.NavActive" Color="#3D3D3D"/>
+      <SolidColorBrush x:Key="St.Line" Color="#2A2A2A"/>
+      <SolidColorBrush x:Key="St.Text" Color="#D9D9D9"/>
+      <SolidColorBrush x:Key="St.TextStrong" Color="#F2F2F2"/>
+      <SolidColorBrush x:Key="St.TextDim" Color="#8C8C8C"/>
+      <SolidColorBrush x:Key="St.Accent" Color="#3FB176"/>
+      <SolidColorBrush x:Key="St.AccentHover" Color="#4BC283"/>
+      <SolidColorBrush x:Key="St.AccentSoft" Color="#27352D"/>
+      <SolidColorBrush x:Key="St.OnAccent" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.Selected" Color="#3FAF75"/>
+      <SolidColorBrush x:Key="St.Menu" Color="#2D2D2D"/>
+      <SolidColorBrush x:Key="St.Field" Color="#353535"/>
+      <SolidColorBrush x:Key="St.Dialog" Color="#2C2C2C"/>
+      <SolidColorBrush x:Key="St.DialogSection" Color="#252525"/>
+      <SolidColorBrush x:Key="St.Overlay" Color="#B3000000"/>
+      <SolidColorBrush x:Key="St.Terminal" Color="#00161C"/>
+      <SolidColorBrush x:Key="St.Folder" Color="#D9A441"/>
+      <SolidColorBrush x:Key="St.Danger" Color="#E5534B"/>
+      <SolidColorBrush x:Key="St.Warning" Color="#E2B93D"/>
+      <SolidColorBrush x:Key="St.Notice" Color="#3A2E1A"/>
+      <!-- Data (charts, meters): never the accent, which the user may set to the colour of a warning. Checked
+           against the card colour of every background preset. Data1 in / CPU / memory, Data2 out. -->
+      <SolidColorBrush x:Key="St.Data1" Color="#3987E5"/>
+      <SolidColorBrush x:Key="St.Data2" Color="#D95926"/>
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="St.Window" Color="#F3F4F5"/>
+      <SolidColorBrush x:Key="St.TitleBar" Color="#E6E7E9"/>
+      <SolidColorBrush x:Key="St.TitleBarText" Color="#74787E"/>
+      <SolidColorBrush x:Key="St.TitleBarHover" Color="#ECEDEF"/>
+      <SolidColorBrush x:Key="St.TerminalBack" Color="#FBFBFB"/>
+      <SolidColorBrush x:Key="St.Panel" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.Card" Color="#F6F7F8"/>
+      <SolidColorBrush x:Key="St.Hover" Color="#ECEDEF"/>
+      <SolidColorBrush x:Key="St.Pressed" Color="#E2E3E5"/>
+      <SolidColorBrush x:Key="St.NavActive" Color="#E4E6E8"/>
+      <SolidColorBrush x:Key="St.Line" Color="#E1E2E4"/>
+      <SolidColorBrush x:Key="St.Text" Color="#2A2C2F"/>
+      <SolidColorBrush x:Key="St.TextStrong" Color="#111214"/>
+      <SolidColorBrush x:Key="St.TextDim" Color="#74787E"/>
+      <SolidColorBrush x:Key="St.Accent" Color="#2FA765"/>
+      <SolidColorBrush x:Key="St.AccentHover" Color="#37B570"/>
+      <SolidColorBrush x:Key="St.AccentSoft" Color="#E2F3E9"/>
+      <SolidColorBrush x:Key="St.OnAccent" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.Selected" Color="#3FAF75"/>
+      <SolidColorBrush x:Key="St.Menu" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.Field" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.Dialog" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="St.DialogSection" Color="#F6F7F8"/>
+      <SolidColorBrush x:Key="St.Overlay" Color="#66000000"/>
+      <SolidColorBrush x:Key="St.Terminal" Color="#FBFBFB"/>
+      <SolidColorBrush x:Key="St.Folder" Color="#D49A2A"/>
+      <SolidColorBrush x:Key="St.Danger" Color="#D93036"/>
+      <SolidColorBrush x:Key="St.Warning" Color="#B7860B"/>
+      <SolidColorBrush x:Key="St.Notice" Color="#FFF4DB"/>
+      <SolidColorBrush x:Key="St.Data1" Color="#2A78D6"/>
+      <SolidColorBrush x:Key="St.Data2" Color="#D4521C"/>
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1,0 +1,37 @@
+name: Windows build and verification
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run dist:win
+      - run: npm run test:ui
+        env:
+          FORTERM_PACKAGED_EXE: ${{ github.workspace }}\release\win-unpacked\forterm.exe
+      - run: npm run test:three-columns
+        env:
+          FORTERM_PACKAGED_EXE: ${{ github.workspace }}\release\win-unpacked\forterm.exe
+      - run: npm run test:reachability
+        env:
+          FORTERM_PACKAGED_EXE: ${{ github.workspace }}\release\win-unpacked\forterm.exe
+      - run: npm run test:burst
+        env:
+          FORTERM_PACKAGED_EXE: ${{ github.workspace }}\release\win-unpacked\forterm.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Forterm-Windows-x64
+          path: |
+            release/*.exe
+            release/*.zip
+            test-results/**

@@ -1,0 +1,10 @@
+{
+  "ref": "refs/tags/2026.0.0",
+  "node_id": "MDM6UmVmNDk2NzM4NzI6cmVmcy90YWdzLzIwMjYuMC4w",
+  "url": "https://api.github.com/repos/sshnet/SSH.NET/git/refs/tags/2026.0.0",
+  "object": {
+    "sha": "7b2fd3dbf2c86a80a7b06cea020aa5f821c9902e",
+    "type": "commit",
+    "url": "https://api.github.com/repos/sshnet/SSH.NET/git/commits/7b2fd3dbf2c86a80a7b06cea020aa5f821c9902e"
+  }
+}

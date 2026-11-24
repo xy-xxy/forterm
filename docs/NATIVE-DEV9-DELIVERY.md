@@ -1,0 +1,63 @@
+# dev.9 完整功能候选交付与复核（2026-10-29）
+
+## 成果与身份
+
+- 完整Mac arm64：`release/Forterm-Native-0.2.2-dev.9-test-macos-arm64.app`，正常cmd/forterm/正常vault/SSH/SFTP/FTP，非预览；可执行SHA256 `300d7407507b70d878917be18ca001c4614f072b6c6989885f4ff15e1dff6550`。adhoc签名核验通过，未启动。
+- Windows四入口审查ZIP：`release/Forterm-Native-0.2.2-dev.9-review-windows-x64.zip`，SHA256 `f96c9f2340408d950aeb23226b929982cee457771bb7b77a20c32c3b164d6b25`，主PE `963290df835c1ca7c764f8a5bbf2a0824a34679d412fb44fc1ea2a65e4c96fbb`。CRC/四AMD64通过，只交叉编译。
+- `release/IDENTITY-Native-0.2.2-dev.9-test-macos-arm64.json`和SHA256SUMS；459源码及tar逐项核对，内嵌权限助手单列EMBEDDED-SOURCES。
+- 检查点`checkpoints/native-0.2.2-dev.9-review-20261028/`（目录后缀沿用脚本，实际本轮29日）。manifest SHA `9a77cb7d8fee1c2813e5a6f834800161dbbdd51ba7452f43b2d644a38fd6c7a3`，tar SHA `fb900aeeead7d9a4e65f454d197bed07b06f4acb63f417e1e6c3fc1e4305db20`。
+
+## 使用与验证安排
+
+用户仍在使用dev8；程序员没有启动dev9或关闭其连接。正常实例IPC会复用仍在运行的正常原生实例，经理不能把旧8画面当9。切换版本须用户自行保存/退出，不能强关；若需并行独立测试，可显式设置已有FORTERM_NATIVE_DATA（独立IPC目录）和FORTERM_NATIVE_SETTINGS_DIR（独立空设置目录）再启动完整入口，不自动复制真实配置或读取真实凭据。
+
+实际系统选择器、原生首绘/物理Tab/新页、窄栏高DPI、真实当前服务器文件和exec权限由经理/用户审后协调；生产上传/sudo不由程序员代测。当前Windows仅编译，不能宣称已运行。
+
+## 验证证据
+
+最终相关包race全部通过：desktop146.219s、settings1.495s、transfers1.346s、metrics1.350s、sshconn32.492s、FTP缓存命中、localfile1.184s、fileops1.594s、connectcheck1.482s、nativepicker1.333s；日志`native/evidence/performance-0.2.2/dev9-final-functional-race.log`。`dev9-current-vet.log`为空且成功。
+
+真实Fyne分发层位于`native/evidence/input-dev9/native-dispatch/`：复制依赖源码，仅Go overlay替换其可见Master TestMain；调用原processKeyPressed/capturesTab，并用合成本地PTY/SSH验证Tab09，不是仅直接TypedKey，也不是物理OS按键。
+
+软件深浅/1050×650/canvas1.5倍率/合成128核与25任务、大表单截图：`native/evidence/ui-0.2.2-dev.9/software-second/`。初始夹具PTY resize/关闭竞争和双stdin.Close已修，旧失败日志保留，最终race为准；CPU模板计数按一次刷新增量而非跨主题累计计数。后续小窗文案/队列高度收敛，实际GUI仍需复验。
+
+## 已实现功能及有限支持
+
+# Forterm Native 0.2.2-dev.9 综合功能候选
+
+当前用户实际Mac反馈与新增要求已合并实现；旧dev8及用户正在使用的连接保持。Go/Fyne原生，无WebView，不启动新GUI，不读取真实凭据或操作生产主机。
+
+## 连接与终端
+
+- 快速连接独立标题，820dp宽大表单；保存连接880dp宽，15dp中文输入、固定操作区和滚动，小窗口/高DPI可达。认证/私钥/sudo问题也使用有界大弹窗。
+- 密码明确区分“仅本次/系统保存”；未勾保存不自动持久化，仅保存信息会明确确认丢弃；保存并连接使用本次输入。系统存储失败保留输入和错误，成功说明依据实际HasPassword。合成正常profile→fake vault→显式连接/本次密码/拒写流程通过，不认定为用户原问题唯一原因。
+- keyboard-interactive明确服务器轮次/追加验证。手动非票据连接若服务端只提供单一密码问题，当前输入仅用于首轮；多因素继续人工确认。Temporary票据不自动回填/重放，密码认证失败后的交互不自动重试原值。
+- 当前表单显式测试连接：后台45秒上下文、取消/单飞/阶段，完整跳板/指纹/认证，测试后关闭。仅探测SFTP子系统或FTP控制登录/当前目录；不打开shell/exec、不写文件/保存连接，不称上传已验证。
+- 终端及编辑器实现fyne.Tabbable。真实Fyne processKeyPressed分发（仅测试覆盖上游TestMain、无可见Master窗口）证明Tab09/ShiftTab CSI Z/焦点隔离/表单遍历，合成真实本地PTY与SSH收到Tab。不是仅直接TypedKey测试；实际用户键鼠另待经理。
+- 会话更多→新建相同会话：独立顶层工作区/VT/PTY，复用已认证SSH及跳板链，引用计数，原页关闭不杀新页，最后引用释放。独立resize/输入输出、认证1和拒新shell不破坏旧页有回环证明。无cwd/命令重放；FTP无此项，本地为新本地shell。新通道15秒取消/等待不叠加。
+- 成功且当前页按偏好自动收起最左连接导航，默认开启；不关文件树/编辑/监控。手动导航epoch优先，后台/失败/测试不抢页，恢复宽度，自动折叠不覆盖手动持久化。
+
+## 文件
+
+- 懒加载可折叠树，每来源独立节点/展开/选中/当前位置；目录首次展开才异步读取，两个在途/有界等待，旧根/源结果丢弃。链接不展开、路径/父目录边界检查；不全盘递归，不扩删除权限。
+- 内部文件剪贴板固定sourceID、路径和元数据，非系统文本；复制/剪切/粘贴/复制到/移动到确认目标来源目录与同名策略。仅普通文件，不擅自做目录递归/多选。
+- 流式复制用已认证连接，32KiB缓冲、远程临时目标、关闭与SHA256复读、源变化复核、最后提交。跨源移动只有验证完成/源未变才删；不称跨源原子，删除确认不确定时明确核对两端。失败/取消前不删源。同源移动优先rename；不shell cp/mv、不重新认证。
+- 同一FTP控制连接不能同时RETR/STOR，同连接复制仅16MiB已清理RAM中转；更大文件明确不支持而不另登。FTP安全覆盖替换不明确时拒绝覆盖，选择新名称/跳过。SFTP覆盖需posix-rename能力。根/链接/父跳转/自身/大小写自别名拒绝。
+- 双端按连接对象排序资源预留，与各来源串行队列/目录写入/编辑保存协调，避免相反方向死锁。移动dirty文件先保存/关闭；干净打开标签保持原路径转只读，不能静默改绑。
+- 传输面板重做紧凑可折叠统计、两行虚拟任务、26dp详情/取消、细进度、真实bytes/rate与仅可靠时ETA，未知总量不定；覆盖/校验/取消/失败明确，清理单独更多菜单，不自动重试。保留footer重排和内外滚动。
+- Mac NSOpenPanel/NSSavePanel原生异步sheet；Windows COM IFileOpenDialog/IFileSaveDialog独立STA，父HWND及取消消息窗口。多选/Unicode/%/#路径不重复解码，回调绑定原源/原目标/生命周期。没有平台能力时明确询问内置fallback，不冒充原生；不嵌入Finder/Explorer，不shell拼路径。
+- 不再在选择回调前同步打开Reader。后台本地文件打开可取消且同路径不堆积，拒链接/身份变化；保存目标从选择后到提交前核对身份/mtime/size，变化停止，仍临时下载后提交。真实系统选择器交互尚未操作，不当Windows实际通过。
+
+## 监控与权限
+
+- 统一16dp矢量图标；总CPU及实际cpu0…逐核双采样环形虚拟网格，guest不重复、iowait按空闲；首样/零delta/重置/热插拔/缺失未知，不用本机核心数或均分总CPU。128核视图有内部滚动，只更新可见行。
+- 内存/磁盘环形及精确字节；上下行真实速率与最多60真实样本趋势，缺失断开，不画装饰假曲线；负载1/5/15独立。时间差优先远端uptime，来源/拓扑变化重置。
+- 默认3秒，可设置并保留显式值；此前10秒为硬编码无显式存储，不改SSH心跳15秒。自动为用户开启，隐藏暂停/取消、恢复重新双采样、超时防重叠。
+- 方式默认同一SSH独立exec或关闭。确实c.client.NewSession，不新TCP登录、不往活动PTY打命令，禁exec明确失败不切换或重登；未实现独立SSH登录模式。
+- 权限含独立默认关闭递归/sudo。只读计划最多2000项/32层，文件普通权限可留空保持，不默认加x，特殊位保持；未知权限不当000。链接跳过/根拒绝/父边界/变化校验，子项先父目录后，进度取消/部分完成不谎称回滚。
+- sudo只关联SSH，需确认真实目标/范围/root身份，先正常exec核对SFTP命名空间及sudo策略。仅使用固定权限助手（已安装Python3），逐段dir_fd+O_NOFOLLOW、inode/dev/mtime验证并fchmod，不执行任意用户命令/chown/rm或chmod -R。无安全API/策略/TTY支持即明确拒绝，不安装agent/不降级。
+- sudo随机唯一提示触发本次独立密码，stdin发送，不用SSH密码，不入argv/文件/日志；NOPASSWD不问，拒绝后不猜试，完成重新读权限。仅隔离自身临时文件/合成测试，未做生产sudo。
+
+## 核验边界
+
+定向/回归日志及合成软件图在native/evidence/performance-0.2.2/dev9-*与native/evidence/ui-0.2.2-dev.9/。当前新完整Mac包由经理复核后启动；程序员未启动它，不关闭dev8会话。Windows仅交叉编译，系统选择器/真实GUI/生产上传/生产sudo均未实际执行，旧上传现场原因仍需用户之后反馈。

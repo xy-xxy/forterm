@@ -1,0 +1,413 @@
+--- a/Buffer/BufferLine.cs
++++ b/Buffer/BufferLine.cs
+@@ -10,6 +10,7 @@
+ public class BufferLine : IEnumerable<BufferCell>
+ {
+     private BufferCell[] _cells;
++    private bool _retainClippedCells;
+ 
+     /// <summary>
+     /// The picture runs shown on this line, or null — which is every line, in almost every session.
+@@ -281,28 +282,28 @@
+     /// <summary>
+     /// Resizes the line to a new column count.
+     /// </summary>
+-    public void Resize(int cols, BufferCell fillCell)
++    public void Resize(int cols, BufferCell fillCell, bool retainClippedCells = false)
+     {
++        _retainClippedCells = retainClippedCells;
+         if (cols == _length)
+             return;
+ 
+         var oldLength = _length;
+ 
+-        if (cols > _length)
++        if (retainClippedCells)
+         {
+-            var newCells = new BufferCell[cols];
+-            Array.Copy(_cells, newCells, _length);
+-            for (int i = _length; i < cols; i++)
++            // Keep hidden cells in backing storage; logical width still equals the live grid.
++            // A later widen restores text, colours and wide-cell pairs without reflowing the prompt.
++            if (cols > _cells.Length)
+             {
+-                newCells[i] = fillCell;
++                int capacity = _cells.Length; Array.Resize(ref _cells, cols);
++                Array.Fill(_cells, fillCell, capacity, cols - capacity);
+             }
+-            _cells = newCells;
+         }
+         else
+         {
+-            var newCells = new BufferCell[cols];
+-            Array.Copy(_cells, newCells, cols);
+-            _cells = newCells;
++            var next = new BufferCell[cols]; int copy = Math.Min(_length, cols);
++            Array.Copy(_cells, next, copy); if (cols > copy) Array.Fill(next, fillCell, copy, cols - copy); _cells = next;
+         }
+         Cache = null;
+         _length = cols;
+@@ -319,10 +320,22 @@
+     /// <summary>
+     /// Fills a range of cells with a specific cell.
+     /// </summary>
++    internal void EraseRetainedTail(BufferCell blank, bool selective = false, bool protectGuarded = false)
++    {
++        if (!_retainClippedCells) return;
++        for (int i = _length; i < _cells.Length; i++)
++        {
++            if (selective && _cells[i].Attributes.IsProtected() || protectGuarded && _cells[i].Attributes.IsGuarded()) continue;
++            _cells[i] = blank;
++        }
++    }
+     public void Fill(BufferCell fillCell, int startCol = 0, int endCol = -1)
+     {
+         if (endCol == -1)
++        {
++            if (startCol == 0) EraseRetainedTail(fillCell);
+             endCol = _length;
++        }
+ 
+         // A wide character straddles two columns, so a range that cuts through one leaves the
+         // other half behind: a width-2 cell whose second column is now a space, or a spacer with
+@@ -483,6 +496,7 @@
+     /// </summary>
+     public void ReplaceCells(int startCol, int endCol, BufferCell fillCell)
+     {
++
+         if (startCol > 0 && GetWidth(startCol - 1) == 2)
+         {
+             _cells[startCol - 1] = fillCell;
+--- a/Buffer/TerminalBuffer.cs
++++ b/Buffer/TerminalBuffer.cs
+@@ -199,7 +199,8 @@
+         }
+     }
+ 
+-    private bool IsReflowEnabled => _hasScrollback && _lines.MaxLength > _rows;
++    public bool ReflowOnResize { get; set; } = true;
++    private bool IsReflowEnabled => ReflowOnResize && _hasScrollback && _lines.MaxLength > _rows;
+ 
+     /// <summary>
+     /// Gets a line from the buffer.
+@@ -850,6 +851,10 @@
+     /// </summary>
+     public void Resize(int newCols, int newRows)
+     {
++        // Save a logical anchor BEFORE any width/height mutation. Reflow can insert
++        // rows before a zsh prompt without moving the saved prompt START itself.
++        var savedAnchor = CaptureResizeAnchor(newCols);
++
+         // Only a wrap chain drops its pictures now. Reflow re-wraps a logical line by copying
+         // ranges of cells between lines, and a run anchored to a column would end up describing
+         // content that is no longer there.
+@@ -884,7 +889,7 @@
+         {
+             for (int i = 0; i < _lines.Length; i++)
+             {
+-                _lines[i]?.Resize(newCols, nullCell);
++                _lines[i]?.Resize(newCols, nullCell, retainClippedCells: !ReflowOnResize && _hasScrollback);
+             }
+         }
+ 
+@@ -924,7 +929,7 @@
+             {
+                 for (int i = 0; i < _lines.Length; i++)
+                 {
+-                    _lines[i]?.Resize(newCols, nullCell);
++                    _lines[i]?.Resize(newCols, nullCell, retainClippedCells: !ReflowOnResize && _hasScrollback);
+                 }
+             }
+         }
+@@ -1024,7 +1029,44 @@
+                 SavedCursorState.Y = Math.Max(SavedCursorState.Y - amountToTrim, 0);
+             }
+             _lines.Resize(newMaxLength);
++        }
++        RestoreResizeAnchor(savedAnchor, newCols);
++    }
++
++    private readonly record struct ResizeAnchor(BufferLine? Line, int Column, int[]? Lengths, int Offset, int OriginalY, bool PendingWrap);
++    private ResizeAnchor CaptureResizeAnchor(int newCols)
++    {
++        int row = SavedCursorState.Y;
++        if (row < 0 || row >= _lines.Length) return new(null, SavedCursorState.X, null, 0, row, SavedCursorState.PendingWrap);
++        var exact = _lines[row];
++        if (!IsReflowEnabled || newCols == _cols || newCols <= 0) return new(exact, SavedCursorState.X, null, 0, row, SavedCursorState.PendingWrap);
++        int first = row; while (first > 0 && _lines[first]!.IsWrapped) first--;
++        int last = row; while (last + 1 < _lines.Length && _lines[last + 1]!.IsWrapped) last++;
++        int cursor = _yBase + _y;
++        var group = new List<BufferLine>(); for (int i = first; i <= last; i++) group.Add(_lines[i]!);
++        if (cursor >= first && cursor <= last || BufferReflow.IsUnreflowable(group)) return new(exact, SavedCursorState.X, null, 0, row, SavedCursorState.PendingWrap);
++        var lengths = BufferReflow.ReflowSmallerGetNewLineLengths(group, _cols, newCols);
++        if (lengths.Length == 0) return new(exact, SavedCursorState.X, null, 0, row, SavedCursorState.PendingWrap);
++        int offset = SavedCursorState.X;
++        for (int i = first; i < row; i++) offset += BufferReflow.GetWrappedLineTrimmedLength(group, i - first, _cols);
++        return new(group[0], SavedCursorState.X, lengths, offset, row, SavedCursorState.PendingWrap);
++    }
++    private void RestoreResizeAnchor(ResizeAnchor anchor, int newCols)
++    {
++        int first = -1;
++        if (anchor.Line != null) for (int i = 0; i < _lines.Length; i++) if (ReferenceEquals(_lines[i], anchor.Line)) { first = i; break; }
++        if (first < 0) { SavedCursorState.Y = Math.Clamp(anchor.OriginalY, 0, Math.Max(0, _lines.Length - 1)); SavedCursorState.X = Math.Clamp(anchor.Column, 0, Math.Max(0, newCols - 1)); return; }
++        int row = 0, column = anchor.Column;
++        if (anchor.Lengths is { } lengths)
++        {
++            column = anchor.Offset;
++            while (row < lengths.Length - 1 && column >= lengths[row]) { if (anchor.PendingWrap && column == lengths[row] && column == newCols) break; column -= lengths[row]; row++; }
++            column = Math.Min(column, lengths[row]);
+         }
++        SavedCursorState.Y = Math.Min(first + row, Math.Max(0, _lines.Length - 1));
++        bool pending = anchor.PendingWrap && column == newCols && newCols > 0;
++        SavedCursorState.X = Math.Clamp(column, 0, Math.Max(0, pending ? newCols : newCols - 1));
++        SavedCursorState.PendingWrap = pending;
+     }
+ 
+     private void ReflowLarger(int newCols, int newRows)
+--- a/InputHandler.Csi.cs
++++ b/InputHandler.Csi.cs
+@@ -449,7 +449,7 @@
+         switch (mode)
+         {
+             case 0: // Erase to right
+-                EraseLineCells(line, _buffer.X, _terminal.Cols, selective);
++                EraseLineCells(line, _buffer.X, _terminal.Cols, selective, eraseHiddenRight: true);
+                 // With its tail erased, this line no longer wraps onto the next -- xterm's
+                 // ClearRight clears the wrap flag, and reverse-wrap reads it.
+                 BreakWrapFromAbove(_buffer.Y + 1);
+@@ -462,7 +462,7 @@
+                     EraseBlocksHangingOver(_buffer.Y + _buffer.YBase, 0, _buffer.X + 1);
+                 break;
+             case 2: // Erase entire line
+-                EraseLineCells(line, 0, _terminal.Cols, selective);
++                EraseLineCells(line, 0, _terminal.Cols, selective, eraseHiddenRight: true);
+                 if (_buffer.HasMultiRowSizedRuns)
+                     EraseBlocksHangingOver(_buffer.Y + _buffer.YBase, 0, _terminal.Cols);
+                 break;
+@@ -1682,7 +1682,7 @@
+     private void SaveCursor()
+     {
+         _buffer.SavedCursorState.X = _buffer.X;
+-        _buffer.SavedCursorState.Y = _buffer.Y;
++        _buffer.SavedCursorState.Y = _buffer.YBase + _buffer.Y;
+         _buffer.SavedCursorState.Attr = _curAttr;
+         _buffer.SavedCursorState.Charset = _currentCharset;
+         // The DESIGNATIONS as well as which G-set is active. ESC ( 0 changes what G0 means, not
+@@ -1704,9 +1704,9 @@
+         // it, so the next character overwrote that cell rather than wrapping, and the flag set
+         // below could not undo it: the coordinate was already gone.
+         if (_buffer.SavedCursorState.PendingWrap)
+-            _buffer.SetCursorRaw(_buffer.SavedCursorState.X, _buffer.SavedCursorState.Y);
++            _buffer.SetCursorRaw(_buffer.SavedCursorState.X, Math.Max(0, _buffer.SavedCursorState.Y - _buffer.YBase));
+         else
+-            _buffer.SetCursor(_buffer.SavedCursorState.X, _buffer.SavedCursorState.Y);
++            _buffer.SetCursor(_buffer.SavedCursorState.X, Math.Max(0, _buffer.SavedCursorState.Y - _buffer.YBase));
+         _curAttr = _buffer.SavedCursorState.Attr;
+         var designations = _buffer.SavedCursorState.Designations;
+         if (designations is not null)
+--- a/InputHandler.Protection.cs
++++ b/InputHandler.Protection.cs
+@@ -79,13 +79,15 @@
+     /// Only ED asks for this; see the note on <c>wholeLine</c> below.
+     /// </param>
+     private void EraseLineCells(BufferLine? line, int start, int end, bool selective,
+-                                bool resetLineAttribute = false)
++                                bool resetLineAttribute = false, bool eraseHiddenRight = false)
+     {
+         if (line is null)
+             return;
+ 
+         var blank = BufferCell.Space;
+         blank.Attributes = GetEraseAttributes();
++        if (eraseHiddenRight || resetLineAttribute && start == 0 && end >= _terminal.Cols)
++            line.EraseRetainedTail(blank, selective, _protectionMode == ProtectionIso);
+ 
+         // A line erased in full by ED goes back to single width. The attribute describes how
+         // the line is DRAWN, and a line ED has cleared has nothing left to draw at double size
+--- a/Options/TerminalOptions.cs
++++ b/Options/TerminalOptions.cs
+@@ -27,6 +27,8 @@
+     /// </summary>
+     public int Rows { get; set; } = 24;
+ 
++    public bool ReflowOnResize { get; set; } = true;
++
+     /// <summary>
+     /// Amount of scrollback in the terminal. 0 disables scrollback.
+     /// </summary>
+@@ -454,6 +456,7 @@
+     {
+         Cols = other.Cols;
+         Rows = other.Rows;
++        ReflowOnResize = other.ReflowOnResize;
+         Scrollback = other.Scrollback;
+         TabStopWidth = other.TabStopWidth;
+         BellSound = other.BellSound;
+--- a/Search/BufferSearch.cs
++++ b/Search/BufferSearch.cs
+@@ -56,12 +56,44 @@
+     private int _current = -1;
+     private bool _disposed;
+ 
++    /// <summary>Forterm: the buffer the hits belong to. The terminal has two and switches.</summary>
++    private TerminalBuffer _buffer;
++
+     public BufferSearch(Terminal terminal)
+     {
+         _terminal = terminal ?? throw new ArgumentNullException(nameof(terminal));
+-        _terminal.Buffer.Trimmed += OnTrimmed;
++        _buffer = _terminal.Buffer;
++        _buffer.Trimmed += OnTrimmed;
+     }
+ 
++    /// <summary>Forterm: whether the terminal still shows the buffer that was searched.</summary>
++    private bool IsShown => ReferenceEquals(_buffer, _terminal.Buffer);
++
++    /// <summary>Forterm: how many matches are held. Unlike <see cref="Count"/>, a match that wrapped counts once.</summary>
++    public int MatchCount => _hits.Count == 0 ? 0 : _hits[^1].MatchId - _hits[0].MatchId + 1;
++
++    /// <summary>Forterm: index of the current match within <see cref="MatchCount"/>, or -1.</summary>
++    public int CurrentMatch => _current < 0 || _current >= _hits.Count ? -1 : _hits[_current].MatchId - _hits[0].MatchId;
++
++    /// <summary>Forterm: the <see cref="SearchHit.MatchId"/> of the current match, or -1.</summary>
++    public int CurrentMatchId => _current < 0 || _current >= _hits.Count ? -1 : _hits[_current].MatchId;
++
++    /// <summary>
++    /// Forterm: the same search again, staying on the current match when it is still there.
++    /// </summary>
++    /// <remarks>
++    /// By position rather than by index: trimming has already moved the old hits, so a match that
++    /// is still in the buffer is found at the row the old hit names.
++    /// </remarks>
++    public int Refresh()
++    {
++        var at = IsShown && _current >= 0 && _current < _hits.Count ? _hits[_current] : (SearchHit?)null;
++        var count = Find(_needle, _options);
++        if (at is { } was)
++            _current = _hits.FindIndex(h => h.BufferRow == was.BufferRow && h.Column == was.Column);
++        return count;
++    }
++
+     /// <summary>How many runs are held. See <see cref="MaxHits"/>.</summary>
+     public int Count => _hits.Count;
+ 
+@@ -85,6 +117,14 @@
+         Truncated = false;
+         _needle = needle ?? string.Empty;
+         _options = options;
++
++        if (!IsShown)
++        {
++            _buffer.Trimmed -= OnTrimmed;
++            _buffer = _terminal.Buffer;
++            if (!_disposed)
++                _buffer.Trimmed += OnTrimmed;
++        }
+ 
+         if (_needle.Length == 0)
+             return 0;
+@@ -110,10 +150,13 @@
+ 
+             SearchRun(lines, row, end, ref matchId);
+ 
+-            if (Truncated)
++            if (Truncated && !options.KeepLast)
+                 break;
+         }
+ 
++        if (options.KeepLast && _hits.Count > MaxHits)
++            DropOldest();
++
+         return _hits.Count;
+     }
+ 
+@@ -127,6 +170,9 @@
+     /// </remarks>
+     public ReadOnlySpan<SearchHit> HitsOnRow(int bufferRow)
+     {
++        if (!IsShown)
++            return ReadOnlySpan<SearchHit>.Empty;   // rows of the other buffer
++
+         var all = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_hits);
+ 
+         var lo = 0;
+@@ -172,7 +218,7 @@
+             return;
+ 
+         _disposed = true;
+-        _terminal.Buffer.Trimmed -= OnTrimmed;
++        _buffer.Trimmed -= OnTrimmed;
+     }
+ 
+     // ---- the walk ------------------------------------------------------------------------
+@@ -197,8 +243,14 @@
+ 
+                 if (_hits.Count >= MaxHits)
+                 {
+-                    Truncated = true;
+-                    return;
++                    if (!_options.KeepLast)
++                    {
++                        Truncated = true;
++                        return;
++                    }
++
++                    if (_hits.Count >= 2 * MaxHits)
++                        DropOldest();
+                 }
+ 
+                 // Matches do not overlap. Step past this one, which may have ended on a later row.
+@@ -218,6 +270,12 @@
+         }
+     }
+ 
++    private void DropOldest()
++    {
++        _hits.RemoveRange(0, _hits.Count - MaxHits);
++        Truncated = true;
++    }
++
+     /// <summary>
+     /// Whether the needle sits at (row, col), and where it ends if so.
+     /// </summary>
+@@ -382,7 +440,7 @@
+     private bool TryMove(int direction, out SearchHit hit)
+     {
+         hit = default;
+-        if (_hits.Count == 0)
++        if (_hits.Count == 0 || !IsShown)
+             return false;
+ 
+         // Step by MATCH rather than by run, so a match that wrapped is one stop rather than two.
+--- a/Search/SearchTypes.cs
++++ b/Search/SearchTypes.cs
+@@ -50,4 +50,10 @@
+ 
+     /// <summary>Require a non-word character either side of the match.</summary>
+     public bool WholeWord { get; init; }
++
++    /// <summary>
++    /// Forterm: when there are more than <see cref="BufferSearch.MaxHits"/> matches, keep the last
++    /// ones rather than the first. Off by default, which is upstream's behaviour.
++    /// </summary>
++    public bool KeepLast { get; init; }
+ }
+--- a/Terminal.cs
++++ b/Terminal.cs
+@@ -785,7 +785,7 @@
+         Colors = new ColorPalette(Options.Theme);
+ 
+         // Initialize buffers
+-        _normalBuffer = new Buffer.TerminalBuffer(Cols, Rows, Options.Scrollback);
++        _normalBuffer = new Buffer.TerminalBuffer(Cols, Rows, Options.Scrollback) { ReflowOnResize = Options.ReflowOnResize };
+         _altBuffer = new Buffer.TerminalBuffer(Cols, Rows, 0, hasScrollback: false);
+         _normalBuffer.LineExitedViewport += line => RaiseLineExitedViewport(line, BufferType.Normal, LineExitReason.Scrolled);
+         _altBuffer.LineExitedViewport += line => RaiseLineExitedViewport(line, BufferType.Alternate, LineExitReason.Scrolled);
+@@ -1067,6 +1067,7 @@
+         ResetTabStops();
+ 
+         // Resize buffers
++        if (_normalBuffer != null) _normalBuffer.ReflowOnResize = Options.ReflowOnResize;
+         _normalBuffer?.Resize(cols, rows);
+         _altBuffer?.Resize(cols, rows);
+ 

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0</TargetFramework><AssemblyName>Forterm.Portable</AssemblyName><PublishSingleFile>true</PublishSingleFile><IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract><EnableCompressionInSingleFile>false</EnableCompressionInSingleFile><PublishTrimmed>false</PublishTrimmed></PropertyGroup>
+ <ItemGroup Condition="'$(PortablePayload)' != ''"><EmbeddedResource Include="$(PortablePayload)" LogicalName="Forterm.Payload.zip"/><AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute"><_Parameter1>PayloadSHA256</_Parameter1><_Parameter2>$(PortablePayloadSHA256)</_Parameter2></AssemblyAttribute></ItemGroup>
+</Project>

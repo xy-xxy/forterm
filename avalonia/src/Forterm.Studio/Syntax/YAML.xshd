@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="YAML" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>(?&lt;=^|\s)\#</Begin></Span>
+    <Rule color="Heading">^(---|\.\.\.)\s*$</Rule>
+    <Rule color="Key">^[\ \t]{0,200}(-[\ \t]{1,20}){0,8}(&quot;[^&quot;]{0,200}&quot;|&#x27;[^&#x27;]{0,200}&#x27;|[^\s\#&#x27;&quot;\[\]{},&amp;*!|&gt;%@`:-][^\#:]{0,200}?)(?=[\ \t]{0,20}:(\s|$))</Rule>
+    <Rule color="Key">(?&lt;=[{,]\s{0,10})[\w.-]{1,100}(?=\s{0,10}:)</Rule>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Variable">\{\{[^}]{0,200}\}\}|\$\{[^}]{0,200}\}|[&amp;*][A-Za-z_][\w-]*</Rule>
+    <Rule color="Type">(?&lt;=\s)!{1,2}[\w/.-]*</Rule>
+    <Rule color="Operator">(?&lt;=:\s{1,10})[|&gt;][+-]?\d?(?=\s{0,20}$)|^\s{0,200}-(?=\s)</Rule>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word><Word>yes</Word><Word>no</Word><Word>on</Word><Word>off</Word><Word>null</Word><Word>True</Word><Word>False</Word><Word>Yes</Word><Word>No</Word><Word>On</Word><Word>Off</Word><Word>Null</Word><Word>TRUE</Word><Word>FALSE</Word><Word>NULL</Word></Keywords>
+    <Rule color="Function">\b[a-z][a-z0-9+.-]{1,10}://[^\s&quot;\&#x27;&lt;&gt;)]+</Rule>
+    <Rule color="Constant">\b(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5}|/\d{1,2})?\b</Rule>
+    <Rule color="Number">\b\d+(\.\d+)?(%|[kKmMgGtT]i?[bB]?|ms|s|m|h|d|w)?\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

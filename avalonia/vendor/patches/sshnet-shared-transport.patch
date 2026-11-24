@@ -1,0 +1,643 @@
+--- upstream/BaseClient.cs
++++ forterm/BaseClient.cs
+@@ -36,6 +36,18 @@
+         /// The current session.
+         /// </value>
+         internal ISession? Session { get; private set; }
++        // Forterm: channel-only clients borrow an authenticated transport. They
++        // never reconnect, authenticate again, own a keepalive timer or close it.
++        private bool _borrowedSession;
++        internal void AttachBorrowedSession(ISession session)
++        {
++            if (!session.IsConnected) throw new InvalidOperationException("SSH transport is closed.");
++            _borrowedSession = true;
++            Session = session;
++            try { OnConnected(); }
++            catch { Session = null; throw; }
++        }
++
+ 
+         /// <summary>
+         /// Gets the factory for creating new services.
+@@ -207,6 +219,7 @@
+         /// <exception cref="ProxyException">Failed to establish proxy connection.</exception>
+         public void Connect()
+         {
++ if (_borrowedSession) throw new InvalidOperationException("Borrowed channels cannot reconnect.");
+             CheckDisposed();
+ 
+             // TODO (see issue #1758):
+@@ -275,6 +288,7 @@
+         /// <exception cref="ProxyException">Failed to establish proxy connection.</exception>
+         public async Task ConnectAsync(CancellationToken cancellationToken)
+         {
++ if (_borrowedSession) throw new InvalidOperationException("Borrowed channels cannot reconnect.");
+             CheckDisposed();
+             cancellationToken.ThrowIfCancellationRequested();
+ 
+@@ -593,6 +607,7 @@
+ 
+         private void DisposeSession(ISession session)
+         {
++ if (_borrowedSession) return;
+             session.ErrorOccured -= Session_ErrorOccurred;
+             session.HostKeyReceived -= Session_HostKeyReceived;
+             session.ServerIdentificationReceived -= Session_ServerIdentificationReceived;
+--- upstream/Channels/Channel.cs
++++ forterm/Channels/Channel.cs
+@@ -18,7 +18,7 @@
+         private readonly Lock _serverWindowSizeLock = new Lock();
+         private readonly Lock _messagingLock = new Lock();
+         private readonly Lock _sendDataLock = new Lock();
+-        private readonly uint _initialWindowSize;
++        private readonly Lock _localWindowLock = new Lock();
+         private readonly ISession _session;
+         private readonly ILogger _logger;
+         private EventWaitHandle _channelClosedWaitHandle = new ManualResetEvent(initialState: false);
+@@ -27,6 +27,9 @@
+         private uint? _remoteChannelNumber;
+         private uint? _remotePacketSize;
+         private bool _isDisposed;
++        private uint _initialWindowSize;
++        private bool _windowByReader;
++        private uint _consumed;
+ 
+         /// <summary>
+         /// Holds a value indicating whether the SSH_MSG_CHANNEL_CLOSE has been sent to the remote party.
+@@ -355,7 +358,42 @@
+ 
+                     totalBytesToSend -= sizeOfCurrentMessage;
+                     offset += sizeOfCurrentMessage;
++                }
++            }
++        }
++
++        // Forterm: sends as much of the data as the server's window allows just now (at most a packet), and never
++        // waits for the window. SendData does wait, and when that takes too long it fails with part of the data sent,
++        // without saying how much. 0: nothing just now; -1: the channel is closed. With whole: all of it or nothing.
++        internal int SendAvailable(byte[] data, int offset, int size, bool whole)
++        {
++            if (!IsOpen || _closeMessageSent)
++            {
++                return -1;
++            }
++
++            lock (_sendDataLock)
++            {
++                uint length;
++                lock (_serverWindowSizeLock)
++                {
++                    length = Math.Min(Math.Min(RemotePacketSize, RemoteWindowSize), (uint)size);
++                    if (whole && length < size)
++                    {
++                        return 0;
++                    }
++
++                    RemoteWindowSize -= length;
+                 }
++
++                if (length == 0)
++                {
++                    // A connection that has failed leaves its channels open.
++                    return IsConnected ? 0 : -1;
++                }
++
++                _session.SendMessage(new ChannelDataMessage(RemoteChannelNumber, data, offset, (int)length));
++                return (int)length;
+             }
+         }
+ 
+@@ -392,6 +430,9 @@
+         protected virtual void OnExtendedData(byte[] data, uint dataTypeCode)
+         {
+             AdjustDataWindow(data.Length);
++
++            // Forterm: nobody reads this data later.
++            ReleaseWindow(data.Length);
+ 
+             ExtendedDataReceived?.Invoke(this, new ChannelExtendedDataEventArgs(LocalChannelNumber, data, dataTypeCode));
+         }
+@@ -763,12 +804,77 @@
+                 catch (Exception ex)
+                 {
+                     OnChannelException(ex);
++                }
++            }
++        }
++
++        // Forterm: the server may send only this much before the reader has taken it. The window is
++        // then given back by ReleaseWindow as data is consumed, not as it arrives, so a reader that
++        // falls behind slows the server down instead of filling memory. Call before the channel opens.
++        internal void LimitWindow(uint size)
++        {
++            _initialWindowSize = size;
++            LocalWindowSize = size;
++            _windowByReader = true;
++        }
++
++        // Forterm: the reader has taken this much (see LimitWindow). Sent in quarters of the window.
++        internal void ReleaseWindow(int count)
++        {
++            if (!_windowByReader || count <= 0)
++            {
++                return;
++            }
++
++            // Never after our own close message: some servers drop the connection for a message to a
++            // channel that is gone. Not waiting for the lock either: Close holds it until the server
++            // has answered, and this may be the thread that receives the answer. What was taken is
++            // then given back with the next call.
++            var mayTell = _messagingLock.TryEnter();
++            try
++            {
++                uint give;
++                lock (_localWindowLock)
++                {
++                    _consumed += (uint)count;
++                    if (!mayTell || _closeMessageSent || !IsOpen || _consumed < _initialWindowSize / 4)
++                    {
++                        return;
++                    }
++
++                    give = _consumed;
+                 }
++
++                SendMessage(new ChannelWindowAdjustMessage(RemoteChannelNumber, give));
++
++                // Only once it is on its way: a failed send loses no window.
++                lock (_localWindowLock)
++                {
++                    _consumed -= give;
++                    LocalWindowSize += give;
++                }
+             }
++            finally
++            {
++                if (mayTell)
++                {
++                    _messagingLock.Exit();
++                }
++            }
+         }
+ 
+         private void AdjustDataWindow(int count)
+         {
++            if (_windowByReader)
++            {
++                lock (_localWindowLock)
++                {
++                    LocalWindowSize -= Math.Min(LocalWindowSize, (uint)count);
++                }
++
++                return;
++            }
++
+             LocalWindowSize -= (uint)count;
+ 
+             // Adjust window if window size is too low
+--- upstream/Session.cs
++++ forterm/Session.cs
+@@ -70,7 +70,7 @@
+         private const int LocalChannelDataPacketSize = 1024 * 64;
+ 
+         internal static readonly string ClientVersionString =
+-            "SSH-2.0-Renci.SshNet.SshClient." + ThisAssembly.NuGetPackageVersion.Replace('-', '_');
++            "SSH-2.0-Renci.SshNet.SshClient." + "2026.0.0_forterm_shared1";
+ 
+         /// <summary>
+         /// Holds the factory to use for creating new services.
+--- upstream/Sftp/ISftpSession.cs
++++ forterm/Sftp/ISftpSession.cs
+@@ -21,6 +21,7 @@
+         /// The SFTP protocol version.
+         /// </value>
+         uint ProtocolVersion { get; }
++        bool SupportsExtension(string name);
+ 
+         /// <summary>
+         /// Gets the remote working directory.
+--- upstream/Sftp/Requests/SftpMkDirRequest.cs
++++ forterm/Sftp/Requests/SftpMkDirRequest.cs
+@@ -35,7 +35,7 @@
+                 var capacity = base.BufferCapacity;
+                 capacity += 4; // Path length
+                 capacity += _path.Length; // Path
+-                capacity += 4; // Attributes
++                capacity += 8; // Forterm: attribute flags + private 0700 directory permissions
+                 return capacity;
+             }
+         }
+@@ -58,7 +58,7 @@
+         {
+             base.SaveData();
+             WriteBinaryString(_path);
+-            Write(0u); // empty attributes
++            Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS\n            Write(448u); // 0700 at creation, before any contents exist
+         }
+     }
+ }
+--- upstream/Sftp/Requests/SftpOpenRequest.cs
++++ forterm/Sftp/Requests/SftpOpenRequest.cs
+@@ -40,6 +40,7 @@
+                 capacity += _fileName.Length; // FileName
+                 capacity += 4; // Flags
+                 capacity += 4; // Attributes
++                if (((uint)Flags & 0x28u)==0x28u) capacity += 4; // Forterm private exclusive create mode
+                 return capacity;
+             }
+         }
+@@ -66,7 +67,12 @@
+ 
+             WriteBinaryString(_fileName);
+             Write((uint)Flags);
+-            Write(0u); // empty attributes
++            if (((uint)Flags & 0x28u)==0x28u)
++            {
++                Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS
++                Write(384u); // 0600, supplied atomically at exclusive creation
++            }
++            else Write(0u); // empty attributes
+         }
+ 
+         public override void Complete(SftpResponse response)
+--- upstream/Sftp/SftpFileAttributes.cs
++++ forterm/Sftp/SftpFileAttributes.cs
+@@ -569,6 +569,7 @@
+         public IDictionary<string, string>? Extensions { get; }
+ 
+         internal uint Permissions { get; private set; }
++        public uint PermissionBits => Permissions & 0xFFFu;
+ 
+         internal SftpFileAttributes(DateTime lastAccessTimeUtc, DateTime lastWriteTimeUtc, long size, int userId, int groupId, uint permissions, Dictionary<string, string>? extensions)
+         {
+--- /dev/null
++++ forterm/Sftp/SftpFileStream.Forterm.cs
+@@ -0,0 +1,24 @@
++using System;
++using System.Threading;
++using System.Threading.Tasks;
++namespace Renci.SshNet.Sftp
++{
++    public sealed partial class SftpFileStream
++    {
++        // Forterm: preserve metadata through the already-open staging handle,
++        // never by resolving a potentially replaced path for chmod.
++        public Task<SftpFileAttributes> ReadHandleAttributesAsync(CancellationToken ct)
++        {
++            ObjectDisposedException.ThrowIf(_disposed, this);
++            return _session.RequestFStatAsync(Handle, ct);
++        }
++        public Task SetHandlePermissionsAsync(short octalDigits, CancellationToken ct)
++        {
++            ObjectDisposedException.ThrowIf(_disposed, this);
++            ct.ThrowIfCancellationRequested();
++            var attrs = new SftpFileAttributes(default, default, 0, 0, 0, 0, null);
++            attrs.SetPermissions(octalDigits);
++            return Task.Run(() => _session.RequestFSetStat(Handle, attrs), CancellationToken.None).WaitAsync(ct);
++        }
++    }
++}
+--- /dev/null
++++ forterm/Sftp/SftpNodeHandle.Forterm.cs
+@@ -0,0 +1,23 @@
++using System;
++using System.Threading;
++using System.Threading.Tasks;
++namespace Renci.SshNet.Sftp
++{
++    public sealed class SftpNodeHandle : IAsyncDisposable
++    {
++        readonly ISftpSession session; readonly byte[] handle; int disposed;
++        internal SftpNodeHandle(ISftpSession session, byte[] handle) { this.session = session; this.handle = handle; }
++        public Task<SftpFileAttributes> AttributesAsync(CancellationToken ct) { ObjectDisposedException.ThrowIf(disposed != 0, this); return session.RequestFStatAsync(handle, ct); }
++        public Task SetPermissionsAsync(short octalDigits, CancellationToken ct)
++        {
++            ObjectDisposedException.ThrowIf(disposed != 0, this); ct.ThrowIfCancellationRequested();
++            var attrs = new SftpFileAttributes(default, default, 0, 0, 0, 0, null); attrs.SetPermissions(octalDigits);
++            return Task.Run(() => session.RequestFSetStat(handle, attrs), CancellationToken.None).WaitAsync(ct);
++        }
++        public async ValueTask DisposeAsync()
++        {
++            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
++            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8)); await session.RequestCloseAsync(handle, timeout.Token);
++        }
++    }
++}
+--- upstream/Sftp/SftpSession.cs
++++ forterm/Sftp/SftpSession.cs
+@@ -28,6 +28,7 @@
+         private ArrayBuffer _buffer = new(32 * 1024);
+         private EventWaitHandle _sftpVersionConfirmed = new AutoResetEvent(initialState: false);
+         private IDictionary<string, string> _supportedExtensions;
++        public bool SupportsExtension(string name) => _supportedExtensions?.ContainsKey(name) == true;
+ 
+         /// <inheritdoc/>
+         public string WorkingDirectory { get; private set; }
+@@ -251,8 +252,13 @@
+                 throw new NotSupportedException(string.Format(CultureInfo.CurrentCulture, "Server SFTP version {0} is not supported.", ProtocolVersion));
+             }
+ 
+-            // Resolve current directory
+-            WorkingDirectory = RequestRealPath(".")[0].Key;
++            // Forterm: keep the subsystem only after explicit REALPATH permission/unsupported
++            // replies. Timeouts, malformed replies and other errors still fail this channel.
++            try { WorkingDirectory = RequestRealPath(".")[0].Key; }
++            catch (SftpException error) when (error.StatusCode is StatusCode.PermissionDenied or StatusCode.OperationUnsupported)
++            {
++                WorkingDirectory = string.Empty; // Unknown; never invent "/".
++            }
+         }
+ 
+         protected override void OnDataReceived(ArraySegment<byte> data)
+--- upstream/SftpClient.cs
++++ forterm/SftpClient.cs
+@@ -282,6 +282,69 @@
+             _bufferSize = 1024 * 32;
+         }
+ 
++        // Forterm extension: only opens the SFTP subsystem on the owner's
++        // existing authenticated transport; disposal releases this channel.
++        internal SftpClient(SshClient owner) : base(owner.ConnectionInfo, false)
++        {
++            _operationTimeout = 30000;
++            _bufferSize = 32768;
++            AttachBorrowedSession(owner.Session ?? throw new InvalidOperationException("SSH transport is closed."));
++        }
++
++        // Forterm: guard APIs intentionally do not REALPATH before LSTAT,
++        // otherwise a final symlink would disappear before the caller checks it.
++        public Task<SftpFileAttributes> LStatRawAsync(string absolutePath, CancellationToken ct)
++        {
++            CheckDisposed();
++            return (_sftpSession ?? throw new SshConnectionException("Client not connected.")).RequestLStatAsync(absolutePath, ct);
++        }
++        public Task<SftpFileStream> OpenRawAsync(string absolutePath, FileMode mode, FileAccess access, CancellationToken ct)
++        {
++            CheckDisposed();
++            if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.", nameof(absolutePath));
++            return SftpFileStream.OpenAsync(_sftpSession, absolutePath, mode, access, (int)_bufferSize, ct);
++        }
++        public Task RenameRawAsync(string oldPath, string newPath, bool replace, CancellationToken ct)
++        {
++            CheckDisposed();
++            var session = _sftpSession ?? throw new SshConnectionException("Client not connected.");
++            if (!oldPath.StartsWith("/", StringComparison.Ordinal) || !newPath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute paths required.");
++            if (!replace) return session.RequestRenameAsync(oldPath, newPath, ct);
++            if (!SupportsAtomicReplacement) throw new NotSupportedException("Atomic replacement not advertised.");
++            return Task.Run(() => session.RequestPosixRename(oldPath, newPath), CancellationToken.None).WaitAsync(ct);
++        }
++        public Task RemoveRawAsync(string absolutePath, CancellationToken ct)
++        {
++            CheckDisposed();
++            if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.");
++            return (_sftpSession ?? throw new SshConnectionException("Client not connected.")).RequestRemoveAsync(absolutePath, ct);
++        }
++        public Task MakeDirectoryRawAsync(string absolutePath, CancellationToken ct)
++        {
++            CheckDisposed(); if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.");
++            return (_sftpSession ?? throw new SshConnectionException("Client not connected.")).RequestMkDirAsync(absolutePath, ct);
++        }
++        public Task RemoveDirectoryRawAsync(string absolutePath, CancellationToken ct)
++        {
++            CheckDisposed(); if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.");
++            return (_sftpSession ?? throw new SshConnectionException("Client not connected.")).RequestRmDirAsync(absolutePath, ct);
++        }
++        public async Task<SftpNodeHandle> OpenNodeHandleRawAsync(string absolutePath, bool directory, CancellationToken ct)
++        {
++            CheckDisposed(); if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.");
++            var session = _sftpSession ?? throw new SshConnectionException("Client not connected.");
++            byte[] handle = directory ? await session.RequestOpenDirAsync(absolutePath, ct).ConfigureAwait(false) : await session.RequestOpenAsync(absolutePath, Flags.Read, ct).ConfigureAwait(false);
++            return new SftpNodeHandle(session, handle);
++        }
++        public Task SetPermissionsRawAsync(string absolutePath, short octalDigits, CancellationToken ct)
++        {
++            CheckDisposed(); if (!absolutePath.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Absolute path required.");
++            var session = _sftpSession ?? throw new SshConnectionException("Client not connected.");
++            ct.ThrowIfCancellationRequested(); var attrs = new SftpFileAttributes(default, default, 0, 0, 0, 0, null); attrs.SetPermissions(octalDigits);
++            return Task.Run(() => session.RequestSetStat(absolutePath, attrs), CancellationToken.None).WaitAsync(ct);
++        }
++        public bool SupportsAtomicReplacement => _sftpSession?.SupportsExtension("posix-rename@openssh.com") == true;
++
+         #endregion Constructors
+ 
+         /// <summary>
+--- upstream/ShellStream.cs
++++ forterm/ShellStream.cs
+@@ -105,6 +105,48 @@
+             }
+         }
+ 
++        // Forterm: "env" requests (RFC 4254 6.4) between pty-req and shell. Servers accept only
++        // the names their policy allows (OpenSSH AcceptEnv); a refused variable is added to
++        // rejected and does not fail the shell. A window above 0 turns on flow control: the server
++        // may be at most that far ahead of the reader, who reports what it took to ReleaseWindow.
++        internal ShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
++            IReadOnlyList<KeyValuePair<string, string>> environment, List<string> rejected, uint window)
++               : this(session, bufferSize, noTerminal: false)
++        {
++            try
++            {
++                if (window > 0)
++                {
++                    ((Channels.Channel)_channel).LimitWindow(window);
++                }
++
++                _channel.Open();
++
++                if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, null!))
++                {
++                    throw new SshException("The pseudo-terminal request was not accepted by the server. Consult the server log for more information.");
++                }
++
++                foreach (var variable in environment)
++                {
++                    if (!_channel.SendEnvironmentVariableRequest(variable.Key, variable.Value))
++                    {
++                        rejected.Add(variable.Key);
++                    }
++                }
++
++                if (!_channel.SendShellRequest())
++                {
++                    throw new SshException("The request to start a shell was not accepted by the server. Consult the server log for more information.");
++                }
++            }
++            catch
++            {
++                Dispose();
++                throw;
++            }
++        }
++
+         /// <summary>
+         /// Initializes a new instance of the <see cref="ShellStream"/> class.
+         /// </summary>
+@@ -1012,6 +1054,19 @@
+             }
+         }
+ 
++        // Forterm: sends directly, past this stream's write buffer. What the buffer could not send in time stays in it
++        // and is sent again, all of it, with whatever is written next. See Channel.SendAvailable.
++        public int SendAvailable(byte[] buffer, int offset, int count, bool whole)
++        {
++            return !_disposed && _channel is Channels.Channel channel ? channel.SendAvailable(buffer, offset, count, whole) : -1;
++        }
++
++        // Forterm: the consumer behind this stream has taken count bytes (see the window parameter).
++        public void ReleaseWindow(int count)
++        {
++            (_channel as Channels.Channel)?.ReleaseWindow(count);
++        }
++
+         private void Channel_DataReceived(object? sender, ChannelDataEventArgs e)
+         {
+             lock (_sync)
+--- upstream/SshClient.cs
++++ forterm/SshClient.cs
+@@ -270,6 +270,57 @@
+         }
+ 
+         /// <inheritdoc />
++        // Forterm extension; owner lifetime is retained by the application's
++        // session lease. A subsystem rejection does not dispose the owner.
++        public SftpClient OpenSharedSftpClient() => new SftpClient(this);
++
++        // Forterm: a caller-authenticated, single-target private relay owns
++        // the socket. No unauthenticated local forwarding listener is created.
++        public void BridgeOwnedSocket(string host, uint port, IForwardedPort lifetime,
++            System.Net.Sockets.Socket socket, Action opened)
++        {
++            CheckDisposed();
++            var session = Session ?? throw new SshConnectionException("SSH transport is closed.");
++            using (var channel = session.CreateChannelDirectTcpip())
++            {
++                Exception failure = null;
++                channel.Exception += (_, args) => { failure = args.Exception; socket.Dispose(); };
++                channel.Open(host, port, lifetime, socket);
++                if (!channel.IsOpen) throw new SshException("Jump server rejected direct-tcpip.");
++                opened();
++                channel.Bind();
++                if (failure != null) throw failure;
++            }
++        }
++
++        private readonly System.Threading.SemaphoreSlim _fortermKeepAliveGate = new System.Threading.SemaphoreSlim(1, 1);
++        private bool _fortermProbeUnconfirmed;
++        // Forterm exposes no remote-forward global requests. Only one global
++        // keepalive may be outstanding; failure replies also prove liveness.
++        public async System.Threading.Tasks.Task ProbeTransportAsync(TimeSpan responseWindow, int missedWindows, System.Threading.CancellationToken ct)
++        {
++            var session = Session ?? throw new SshConnectionException("SSH transport is closed.");
++            await _fortermKeepAliveGate.WaitAsync(ct).ConfigureAwait(false);
++            var reply = new System.Threading.Tasks.TaskCompletionSource<bool>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
++            EventHandler<MessageEventArgs<Renci.SshNet.Messages.Connection.RequestSuccessMessage>> success = (_, _) => reply.TrySetResult(true);
++            EventHandler<MessageEventArgs<Renci.SshNet.Messages.Connection.RequestFailureMessage>> failure = (_, _) => reply.TrySetResult(true);
++            try
++            {
++                if (_fortermProbeUnconfirmed) throw new SshException("An unconfirmed global request is still outstanding.");
++                session.RequestSuccessReceived += success;
++                session.RequestFailureReceived += failure;
++                session.SendMessage(new Renci.SshNet.Messages.Connection.GlobalRequestMessage(System.Text.Encoding.ASCII.GetBytes("keepalive@openssh.com"), true));
++                for (int n = 0; n < missedWindows; n++)
++                {
++                    try { await reply.Task.WaitAsync(responseWindow, ct).ConfigureAwait(false); return; }
++                    catch (TimeoutException) when (n + 1 < missedWindows) { }
++                }
++            }
++            catch (TimeoutException) { _fortermProbeUnconfirmed = true; throw; }
++            catch (System.OperationCanceledException) { if (!reply.Task.IsCompleted) _fortermProbeUnconfirmed = true; throw; }
++            finally { session.RequestSuccessReceived -= success; session.RequestFailureReceived -= failure; _fortermKeepAliveGate.Release(); }
++        }
++
+         public ShellStream CreateShellStream(string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize)
+         {
+             return CreateShellStream(terminalName, columns, rows, width, height, bufferSize, terminalModeValues: null);
+@@ -283,6 +334,19 @@
+             return ServiceFactory.CreateShellStream(Session, terminalName, columns, rows, width, height, terminalModeValues, bufferSize);
+         }
+ 
++        // Forterm: a shell whose channel sends "env" requests before the shell request. Names the
++        // server refused are returned; the shell still opens. A window above 0 turns on flow control
++        // (see ShellStream.ReleaseWindow).
++        public ShellStream CreateShellStream(string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
++            IReadOnlyList<KeyValuePair<string, string>> environment, out IReadOnlyList<string> rejected, uint window = 0)
++        {
++            EnsureSessionIsOpen();
++            var refused = new List<string>();
++            var stream = new ShellStream(Session!, terminalName, columns, rows, width, height, bufferSize, environment, refused, window);
++            rejected = refused;
++            return stream;
++        }
++
+         /// <inheritdoc />
+         public ShellStream CreateShellStreamNoTerminal(int bufferSize = -1)
+         {
+--- upstream/SshCommand.cs
++++ forterm/SshCommand.cs
+@@ -31,6 +31,11 @@
+         private bool _isDisposed;
+         private ChannelInputStream? _inputStream;
+         private TimeSpan _commandTimeout;
++        // Forterm: bound combined stdout/stderr at the producer, before PipeStream buffering.
++        private long _outputBytes;
++        private int _outputLimitReached;
++        /// <summary>Maximum combined output bytes. Must be positive; default preserves upstream behavior.</summary>
++        public int MaxOutputBytes { get; set; } = int.MaxValue;
+ 
+         /// <summary>
+         /// The token supplied as an argument to <see cref="ExecuteAsync(CancellationToken)"/>.
+@@ -271,6 +276,9 @@
+                 _channel = _session.CreateChannelSession();
+             }
+ 
++            if (MaxOutputBytes <= 0) throw new ArgumentOutOfRangeException(nameof(MaxOutputBytes));
++            _outputBytes = 0;
++            _outputLimitReached = 0;
+             _exitStatus = default;
+             _haveExitStatus = false;
+             ExitSignal = null;
+@@ -292,7 +300,11 @@
+             _channel.Closed += Channel_Closed;
+             _channel.Open();
+ 
+-            _ = _channel.SendExecRequest(CommandText);
++            if (!_channel.SendExecRequest(CommandText))
++            {
++                throw new SshException("服务器拒绝 exec 通道请求；其他通道保持可用。");
++            }
++            cancellationToken.ThrowIfCancellationRequested();
+ 
+             if (CommandTimeout != Timeout.InfiniteTimeSpan)
+             {
+@@ -583,6 +595,7 @@
+ 
+         private void Channel_ExtendedDataReceived(object? sender, ChannelExtendedDataEventArgs e)
+         {
++            if (!AcceptOutput(e.Data.Count)) return;
+             ExtendedOutputStream.Write(e.Data.Array!, e.Data.Offset, e.Data.Count);
+ 
+             if (e.DataTypeCode == 1)
+@@ -591,8 +604,23 @@
+             }
+         }
+ 
++        private bool AcceptOutput(int count)
++        {
++            if (Volatile.Read(ref _outputLimitReached) != 0) return false;
++            if (Interlocked.Add(ref _outputBytes, count) <= MaxOutputBytes) return true;
++            if (Interlocked.Exchange(ref _outputLimitReached, 1) == 0)
++            {
++                _ = _tcs?.TrySetException(new IOException("exec 输出超过允许边界，已停止当前命令通道。"));
++                // Never wait for SSH channel-close on the receiver thread.
++                var channel = _channel;
++                ThreadPool.QueueUserWorkItem(_ => { try { channel.Dispose(); } catch { } });
++            }
++            return false;
++        }
++
+         private void Channel_DataReceived(object? sender, ChannelDataEventArgs e)
+         {
++            if (!AcceptOutput(e.Data.Count)) return;
+             OutputStream.Write(e.Data.Array!, e.Data.Offset, e.Data.Count);
+         }
+ 

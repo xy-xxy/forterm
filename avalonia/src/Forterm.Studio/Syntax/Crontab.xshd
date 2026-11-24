@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Crontab" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>^\s*\#</Begin></Span>
+    <Rule color="Key">^\s*[A-Z_]+(?=\s*=)</Rule>
+    <Rule color="Number">^\s*([\d*/,-]+\s+){4}[\w*/,-]+</Rule>
+    <Rule color="Keyword">^\s*@(reboot|yearly|annually|monthly|weekly|daily|midnight|hourly)\b</Rule>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule>
+    <Rule color="Operator">&amp;&amp;|\|\||[|&amp;&lt;&gt;;]</Rule>
+    <Rule color="String">(?&lt;=\s)/[\w./@%+-]+</Rule>
+  </RuleSet>
+</SyntaxDefinition>

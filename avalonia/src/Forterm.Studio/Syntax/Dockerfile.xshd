@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Dockerfile" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet ignoreCase="true">
+    <Span color="Comment"><Begin>^\s*\#</Begin></Span>
+    <Rule color="Keyword">^\s*(FROM|RUN|CMD|LABEL|MAINTAINER|EXPOSE|ENV|ADD|COPY|ENTRYPOINT|VOLUME|USER|WORKDIR|ARG|ONBUILD|STOPSIGNAL|HEALTHCHECK|SHELL)(?=\s)</Rule>
+    <Rule color="Keyword">(?&lt;=\s)AS(?=\s)</Rule>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/><Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule>
+    <Rule color="Key">(?&lt;=\s)[A-Za-z_]\w*(?==)</Rule>
+    <Rule color="Type">(?&lt;=\s)--?[a-z][\w-]*</Rule>
+    <Rule color="Operator">&amp;&amp;|\|\||\\$|[|;]</Rule>
+    <Rule color="Function">\b[a-z][a-z0-9+.-]{1,10}://[^\s&quot;\&#x27;&lt;&gt;)]+</Rule>
+    <Rule color="Constant">\b(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5}|/\d{1,2})?\b</Rule>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

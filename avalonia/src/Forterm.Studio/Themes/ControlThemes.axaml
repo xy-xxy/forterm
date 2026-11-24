@@ -1,0 +1,71 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:Forterm.Studio.Controls">
+  <ControlTheme x:Key="{x:Type c:StudioPane}" TargetType="c:StudioPane">
+    <Setter Property="Background" Value="{DynamicResource St.Panel}"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <DockPanel Background="{TemplateBinding Background}">
+          <Grid DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto" Margin="6,0,4,0">
+            <ContentPresenter Content="{TemplateBinding Header}" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" Classes="pane-icon" Command="{TemplateBinding MaximizeCommand}" ToolTip.Tip="最大化 / 还原此栏">
+              <Panel>
+                <c:StrokeIcon Data="{StaticResource Icon.Maximize}" Width="12" Height="12" IsVisible="{Binding !IsMaximized, RelativeSource={RelativeSource TemplatedParent}}"/>
+                <c:StrokeIcon Data="{StaticResource Icon.Restore}" Width="12" Height="12" IsVisible="{Binding IsMaximized, RelativeSource={RelativeSource TemplatedParent}}"/>
+              </Panel>
+            </Button>
+            <Button Grid.Column="3" Classes="pane-icon" Command="{TemplateBinding CloseCommand}" ToolTip.Tip="收起此栏">
+              <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="12" Height="12"/>
+            </Button>
+          </Grid>
+          <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"/>
+        </DockPanel>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+
+  <c:IndentConverter x:Key="TreeIndent"/>
+
+  <!-- Small, dim chevron that rotates when expanded. -->
+  <ControlTheme x:Key="StudioChevron" TargetType="ToggleButton">
+    <Setter Property="Width" Value="18"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/>
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}">
+          <c:StrokeIcon Name="Icon" Data="{StaticResource Icon.ChevronRight}" Width="10" Height="10" Thickness="2.4" RenderTransformOrigin="50%,50%"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:checked /template/ c|StrokeIcon#Icon"><Setter Property="RenderTransform" Value="rotate(90deg)"/></Style>
+    <Style Selector="^:pointerover"><Setter Property="Foreground" Value="{DynamicResource St.Text}"/></Style>
+  </ControlTheme>
+
+  <!-- Compact tree row used by the library tree and the file tree. -->
+  <ControlTheme x:Key="StudioTreeViewItem" TargetType="TreeViewItem">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource St.Text}"/>
+    <Setter Property="FontSize" Value="12.5"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel>
+          <Border Name="PART_LayoutRoot" Background="{TemplateBinding Background}" CornerRadius="4" MinHeight="28" Margin="4,0">
+            <Grid ColumnDefinitions="Auto,*" Margin="{TemplateBinding Level, Converter={StaticResource TreeIndent}}">
+              <ToggleButton Name="PART_ExpandCollapseChevron" Theme="{StaticResource StudioChevron}" IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}" VerticalAlignment="Center"/>
+              <ContentPresenter Name="PART_HeaderPresenter" Grid.Column="1" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                VerticalAlignment="Center" Margin="2,0,0,0"/>
+            </Grid>
+          </Border>
+          <ItemsPresenter Name="PART_ItemsPresenter" IsVisible="{TemplateBinding IsExpanded}" ItemsPanel="{TemplateBinding ItemsPanel}"/>
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:empty /template/ ToggleButton#PART_ExpandCollapseChevron"><Setter Property="Opacity" Value="0"/><Setter Property="IsHitTestVisible" Value="False"/></Style>
+    <Style Selector="^ /template/ Border#PART_LayoutRoot:pointerover"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="^:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/></Style>
+    <Style Selector="^:selected"><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+  </ControlTheme>
+</ResourceDictionary>

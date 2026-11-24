@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Forterm.Studio.ViewModels"
+             xmlns:c="using:Forterm.Studio.Controls"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="Forterm.Studio.Views.EditorView"
+             x:DataType="vm:EditorTabViewModel">
+  <UserControl.Styles>
+    <Style Selector="ToggleButton.opt">
+      <Setter Property="Padding" Value="6,2"/><Setter Property="MinHeight" Value="0"/><Setter Property="MinWidth" Value="26"/><Setter Property="FontSize" Value="11.5"/><Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Background" Value="Transparent"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ToggleButton.opt:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="ToggleButton.opt:checked /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+    <Style Selector="TextBlock.bad"><Setter Property="Foreground" Value="{DynamicResource St.Danger}"/></Style>
+    <Style Selector="Button.status"><Setter Property="Background" Value="Transparent"/><Setter Property="Padding" Value="4,1"/><Setter Property="MinHeight" Value="0"/><Setter Property="CornerRadius" Value="3"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+    <Style Selector="Button.status:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+  </UserControl.Styles>
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}"/>
+    <KeyBinding Gesture="Meta+S" Command="{Binding SaveCommand}"/>
+  </UserControl.KeyBindings>
+  <DockPanel Background="{DynamicResource St.Panel}">
+    <Border DockPanel.Dock="Top" Height="34" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,0,6,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <c:StrokeIcon Data="{StaticResource Icon.File}" Width="13" Height="13" Thickness="1.7"/>
+          <TextBlock Text="{Binding Path}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420"/>
+          <Border Background="{DynamicResource St.Hover}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Details}" FontSize="11" Classes="dim"/>
+          </Border>
+          <Border Background="{DynamicResource St.Notice}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center" IsVisible="{Binding IsReadOnly}">
+            <TextBlock Text="只读" FontSize="11"/>
+          </Border>
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="{Binding Status}" FontSize="11.5" Classes="dim" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis"/>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinHeight="26" Padding="8,2" FontSize="12" MaxDropDownHeight="360" ToolTip.Tip="{Binding LanguageTip}" AutomationProperties.Name="语言（关键字颜色）"/>
+          <Button Name="FindButton" Classes="flat" ToolTip.Tip="查找和替换" AutomationProperties.Name="查找和替换"><c:StrokeIcon Data="{StaticResource Icon.Search}" Width="13" Height="13"/></Button>
+          <Button Classes="flat" Command="{Binding SaveAsCommand}" IsEnabled="{Binding CanEdit}" ToolTip.Tip="另存为新名称（同一目录，不覆盖）" AutomationProperties.Name="另存为">
+            <TextBlock Text="另存为" FontSize="12"/>
+          </Button>
+          <Button Classes="primary" Padding="12,3" MinWidth="0" Command="{Binding SaveCommand}" IsEnabled="{Binding CanEdit}" ToolTip.Tip="保存（Ctrl / ⌘ + S）" AutomationProperties.Name="保存文件">
+            <TextBlock Text="保存" FontSize="12"/>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <!-- find, replace -->
+    <Border DockPanel.Dock="Top" Classes="reveal" IsVisible="{Binding IsOpen}" Background="{DynamicResource St.Card}" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,0,1" Padding="10,6" DataContext="{Binding Find}" x:DataType="vm:EditorFindViewModel">
+      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="5">
+        <Button Classes="flat" Command="{Binding ToggleReplaceCommand}" IsEnabled="{Binding CanReplace}" ToolTip.Tip="显示或收起替换" AutomationProperties.Name="显示或收起替换">
+          <Panel>
+            <c:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="11" Height="11" IsVisible="{Binding !IsReplacing}"/>
+            <c:StrokeIcon Data="{StaticResource Icon.ChevronDown}" Width="11" Height="11" IsVisible="{Binding IsReplacing}"/>
+          </Panel>
+        </Button>
+        <TextBox Name="FindText" Grid.Column="1" Text="{Binding Query}" PlaceholderText="查找" FontSize="12" Padding="8,4" MinHeight="0" MaxLength="1000" AutomationProperties.Name="查找"/>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+          <TextBlock Text="{Binding Status}" FontSize="11.5" MinWidth="64" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0" Classes="dim" Classes.bad="{Binding IsBad}"/>
+          <ToggleButton Classes="opt" Content="Aa" IsChecked="{Binding MatchCase}" ToolTip.Tip="区分大小写" AutomationProperties.Name="区分大小写"/>
+          <ToggleButton Classes="opt" Content="词" IsChecked="{Binding WholeWord}" ToolTip.Tip="全字匹配" AutomationProperties.Name="全字匹配"/>
+          <ToggleButton Classes="opt" Content=".*" IsChecked="{Binding UseRegex}" ToolTip.Tip="正则表达式" AutomationProperties.Name="正则表达式"/>
+          <Button Classes="flat" Command="{Binding PreviousCommand}" ToolTip.Tip="上一处（Shift+Enter）" AutomationProperties.Name="上一处"><c:StrokeIcon Data="{StaticResource Icon.ChevronUp}" Width="12" Height="12"/></Button>
+          <Button Classes="flat" Command="{Binding NextCommand}" ToolTip.Tip="下一处（Enter）" AutomationProperties.Name="下一处"><c:StrokeIcon Data="{StaticResource Icon.ChevronDown}" Width="12" Height="12"/></Button>
+          <Button Classes="flat" Command="{Binding CloseCommand}" ToolTip.Tip="关闭（Esc）" AutomationProperties.Name="关闭查找"><c:StrokeIcon Data="{StaticResource Icon.Close}" Width="11" Height="11"/></Button>
+        </StackPanel>
+        <TextBox Name="ReplaceText" Grid.Row="1" Grid.Column="1" Text="{Binding Replacement}" PlaceholderText="替换为" FontSize="12" Padding="8,4" MinHeight="0" IsVisible="{Binding IsReplacing}" AutomationProperties.Name="替换为"/>
+        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsReplacing}" HorizontalAlignment="Right">
+          <Button Classes="secondary" Content="替换" Padding="10,2" MinHeight="0" FontSize="12" Command="{Binding ReplaceCommand}" IsEnabled="{Binding CanReplace}"/>
+          <Button Classes="secondary" Content="全部替换" Padding="10,2" MinHeight="0" FontSize="12" Command="{Binding ReplaceAllCommand}" IsEnabled="{Binding CanReplace}"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <!-- go to line -->
+    <Border DockPanel.Dock="Top" Classes="reveal" IsVisible="{Binding IsGoingToLine}" Background="{DynamicResource St.Card}" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,0,1" Padding="10,6" DataContext="{Binding Find}" x:DataType="vm:EditorFindViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="跳到行" FontSize="12" VerticalAlignment="Center"/>
+        <TextBox Name="LineText" Text="{Binding Line}" Width="130" PlaceholderText="行 或 行:列" FontSize="12" Padding="8,4" MinHeight="0" AutomationProperties.Name="跳到行"/>
+        <TextBlock Text="Enter 跳转，Esc 关闭；负数从末尾数" FontSize="11.5" Classes="dim" VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
+    <!-- where the caret is -->
+    <Border DockPanel.Dock="Bottom" Height="24" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="10,0,8,0" ColumnSpacing="10">
+        <Button Name="PositionButton" Classes="status" ToolTip.Tip="跳到行（Ctrl+G）" AutomationProperties.Name="跳到行"><TextBlock Name="PositionText" FontSize="11" FontFeatures="tnum"/></Button>
+        <TextBlock Name="SelectionText" Grid.Column="1" FontSize="11" Classes="dim" VerticalAlignment="Center"/>
+        <TextBlock Name="SizeText" Grid.Column="2" FontSize="11" Classes="dim" VerticalAlignment="Center"/>
+        <Button Name="WrapButton" Grid.Column="3" Classes="status" ToolTip.Tip="自动换行" AutomationProperties.Name="自动换行"><TextBlock Name="WrapText" FontSize="11"/></Button>
+      </Grid>
+    </Border>
+    <ae:TextEditor Name="Editor" Document="{Binding Document}" IsReadOnly="{Binding !CanEdit}"
+                   HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="6,4,0,0"
+                   AutomationProperties.Name="远程文件内容"/>
+  </DockPanel>
+</UserControl>

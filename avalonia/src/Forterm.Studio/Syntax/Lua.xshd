@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Lua" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment" multiline="true"><Begin>--\[\[</Begin><End>\]\]</End></Span>
+    <Span color="Comment"><Begin>--</Begin></Span>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End><RuleSet><Span begin="\\" end="."/></RuleSet></Span>
+    <Keywords color="Keyword"><Word>and</Word><Word>break</Word><Word>do</Word><Word>else</Word><Word>elseif</Word><Word>end</Word><Word>for</Word><Word>function</Word><Word>goto</Word><Word>if</Word><Word>in</Word><Word>local</Word><Word>not</Word><Word>or</Word><Word>repeat</Word><Word>return</Word><Word>then</Word><Word>until</Word><Word>while</Word></Keywords>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word><Word>nil</Word></Keywords>
+    <Rule color="Function">(?&lt;![\w.:])[A-Za-z_][\w.:]{0,80}(?=\s{0,8}[({&quot;&#x27;])</Rule>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

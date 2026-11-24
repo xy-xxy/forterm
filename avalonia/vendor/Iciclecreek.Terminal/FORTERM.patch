@@ -1,0 +1,643 @@
+--- a/TerminalControl.cs
++++ b/TerminalControl.cs
+@@ -19,7 +19,40 @@
+         private ScrollBar? _scrollBar;
+         private string? _currentDirectory;
+ 
++        public static readonly StyledProperty<bool> AutoStartOnLoadProperty =
++            AvaloniaProperty.Register<TerminalControl, bool>(nameof(AutoStartOnLoad), true);
++        public bool AutoStartOnLoad
++        {
++            get => GetValue(AutoStartOnLoadProperty);
++            set => SetValue(AutoStartOnLoadProperty, value);
++        }
+ 
++
++        private Func<string, Task<string?>>? _pasteFilter;
++        private Func<string, string>? _copyFilter;
++        private Func<string, System.Collections.Generic.IReadOnlyList<TextHighlight>>? _highlightProvider;
++
++        /// <inheritdoc cref="TerminalView.PasteFilter"/>
++        public Func<string, Task<string?>>? PasteFilter
++        {
++            get => _pasteFilter;
++            set { _pasteFilter = value; if (_terminalView != null) _terminalView.PasteFilter = value; }
++        }
++
++        /// <inheritdoc cref="TerminalView.CopyFilter"/>
++        public Func<string, string>? CopyFilter
++        {
++            get => _copyFilter;
++            set { _copyFilter = value; if (_terminalView != null) _terminalView.CopyFilter = value; }
++        }
++
++        /// <inheritdoc cref="TerminalView.HighlightProvider"/>
++        public Func<string, System.Collections.Generic.IReadOnlyList<TextHighlight>>? HighlightProvider
++        {
++            get => _highlightProvider;
++            set { _highlightProvider = value; if (_terminalView != null) _terminalView.HighlightProvider = value; }
++        }
++
+         public static readonly StyledProperty<TextDecorationLocation?> TextDecorationsProperty =
+             AvaloniaProperty.Register<TerminalControl, TextDecorationLocation?>(
+                 nameof(TextDecorations),
+@@ -683,6 +716,21 @@
+         /// <inheritdoc cref="TerminalView.SearchCurrentIndex"/>
+         public int SearchCurrentIndex => _terminalView?.SearchCurrentIndex ?? -1;
+ 
++        /// <inheritdoc cref="TerminalView.OutputWritten"/>
++        public long OutputWritten => _terminalView?.OutputWritten ?? 0;
++
++        /// <inheritdoc cref="TerminalView.ReadCursorLine"/>
++        public TerminalCursorLine? ReadCursorLine() => _terminalView?.ReadCursorLine();
++
++        /// <inheritdoc cref="TerminalView.SearchMatchCount"/>
++        public int SearchMatchCount => _terminalView?.SearchMatchCount ?? 0;
++
++        /// <inheritdoc cref="TerminalView.SearchCurrentMatch"/>
++        public int SearchCurrentMatch => _terminalView?.SearchCurrentMatch ?? -1;
++
++        /// <inheritdoc cref="TerminalView.RefreshSearch"/>
++        public int RefreshSearch() => _terminalView?.RefreshSearch() ?? 0;
++
+         /// <inheritdoc cref="TerminalView.SearchTruncated"/>
+         public bool SearchTruncated => _terminalView?.SearchTruncated ?? false;
+ 
+@@ -866,6 +914,9 @@
+             if (_terminalView != null)
+             {
+                 _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
++                _terminalView.PasteFilter = _pasteFilter;
++                _terminalView.CopyFilter = _copyFilter;
++                _terminalView.HighlightProvider = _highlightProvider;
+                 _terminalView.PropertyChanged += OnTerminalViewPropertyChanged;
+                 _terminalView.ProcessExited += OnTerminalViewProcessExited;
+                 _terminalView.WritingMessage += OnTerminalViewWritingMessage;
+--- /dev/null
++++ b/TerminalView.Forterm.cs
+@@ -0,0 +1,195 @@
++using System;
++using System.Collections.Generic;
++using System.Text;
++using System.Threading.Tasks;
++using Avalonia.Media;
++using XTerm.Buffer;
++using XTerm.Common;
++
++namespace Iciclecreek.Terminal
++{
++    /// <summary>A run of characters of one line to draw in <paramref name="Brush"/>. Positions are UTF-16
++    /// indices into the text the provider was given.</summary>
++    public readonly record struct TextHighlight(int Start, int Length, IBrush Brush);
++
++    /// <summary>The line the cursor is on, as its screen rows: one text per column, empty for the second
++    /// column of a wide character. <paramref name="Written"/> is <see cref="TerminalView.OutputWritten"/>
++    /// at that moment.</summary>
++    public sealed record TerminalCursorLine(IReadOnlyList<IReadOnlyList<string>> Rows, int Row, int Column, bool Alternate, long Written);
++
++    // Forterm additions, kept apart from the upstream source. All are null by default, which leaves every
++    // upstream behaviour as it was.
++    public partial class TerminalView
++    {
++        private Func<string, IReadOnlyList<TextHighlight>>? _highlightProvider;
++
++        /// <summary>
++        /// Reviews clipboard text before <see cref="PasteAsync"/> sends it. Gets the raw text and returns
++        /// what to send, or null to send nothing. Every paste path of this view goes through PasteAsync.
++        /// </summary>
++        /// <remarks>
++        /// With a filter set the paste is always sent as text: the bracketed-paste MIME announcement
++        /// (mode 5522) is not used, because it would hand the program formats the filter never saw.
++        /// </remarks>
++        public Func<string, Task<string?>>? PasteFilter { get; set; }
++
++        /// <summary>
++        /// Adjusts the selected text before <see cref="CopyAsync"/> puts it on the clipboard.
++        /// </summary>
++        public Func<string, string>? CopyFilter { get; set; }
++
++        /// <summary>
++        /// Colours for text the program printed in the default foreground. Called with the text of one
++        /// physical row whenever that row is rebuilt; earlier spans win where spans overlap. Cells with a
++        /// text or background colour of their own, inverse cells, the alternate screen and reverse video are left alone.
++        /// </summary>
++        public Func<string, IReadOnlyList<TextHighlight>>? HighlightProvider
++        {
++            get => _highlightProvider;
++            set
++            {
++                if (ReferenceEquals(_highlightProvider, value))
++                    return;
++                _highlightProvider = value;
++                InvalidateRunCaches();
++            }
++        }
++
++        /// <summary>Bytes of output the emulator has taken in so far. <see cref="OutputReceived"/> is raised
++        /// for a chunk just before that chunk is added.</summary>
++        public long OutputWritten => System.Threading.Interlocked.Read(ref Counters.Bytes);
++
++        /// <summary>The line the cursor is on, over all the rows it wraps across.</summary>
++        public TerminalCursorLine ReadCursorLine()
++        {
++            lock (_terminalLock)
++            {
++                var buffer = _terminal.Buffer;
++                int at = buffer.YBase + buffer.Y, first = at, last = at;
++                while (first > 0 && at - first < _terminal.Rows && buffer.Lines[first] is { IsWrapped: true })
++                    first--;
++                while (last + 1 < buffer.Lines.Length && last - at < _terminal.Rows && buffer.Lines[last + 1] is { IsWrapped: true })
++                    last++;
++
++                var rows = new List<IReadOnlyList<string>>();
++                for (int r = first; r <= last; r++)
++                {
++                    var cells = new List<string>();
++                    if (buffer.Lines[r] is { } line)
++                    {
++                        int end = Math.Min(_terminal.Cols, line.Length);
++                        // Blank cells at the end of the line are not text; inside a wrapped line they are.
++                        while (r == last && end > 0 && line[end - 1] is { Width: <= 1, CodePoint: 0 or ' ' } && (r > at || end > buffer.X))
++                            end--;
++                        for (int x = 0; x < end; x++)
++                            cells.Add(line[x] is var cell && cell.Width == 0 ? "" : cell.CodePoint == 0 ? " " : cell.Content);
++                    }
++                    rows.Add(cells);
++                }
++                return new TerminalCursorLine(rows, at - first, buffer.X, _terminal.IsAlternateBufferActive, OutputWritten);
++            }
++        }
++
++        /// <summary>How many matches the search holds; one that wrapped counts once.</summary>
++        public int SearchMatchCount
++        {
++            get { lock (_terminalLock) return _search?.MatchCount ?? 0; }
++        }
++
++        /// <summary>Index of the current match within <see cref="SearchMatchCount"/>, or -1.</summary>
++        public int SearchCurrentMatch
++        {
++            get { lock (_terminalLock) return _search?.CurrentMatch ?? -1; }
++        }
++
++        /// <summary>Searches again for the same text, staying on the current match when it is still there.</summary>
++        public int RefreshSearch()
++        {
++            int count = 0;
++            lock (_terminalLock)
++            {
++                if (_search is { } search)
++                {
++                    count = search.Refresh();
++                    _currentMatchId = search.CurrentMatchId;
++                }
++            }
++            InvalidateVisual();
++            return count;
++        }
++
++        /// <summary>The highlight brush of each column of a row, or null when nothing on it is highlighted.</summary>
++        private IBrush?[]? HighlightColumns(BufferLine line)
++        {
++            var provider = _highlightProvider;
++            if (provider is null || _terminal.ReverseVideo || _terminal.IsAlternateBufferActive)
++                return null;
++
++            int cols = Math.Min(_terminal.Cols, line.Length);
++            int last = cols - 1;
++            while (last >= 0 && line[last] is { Width: <= 1, CodePoint: 0 or ' ' })
++                last--;
++            if (last < 0)
++                return null;
++
++            var text = new StringBuilder(last + 1);
++            var columns = new List<int>(last + 1);
++            for (int x = 0; x <= last; x++)
++            {
++                var cell = line[x];
++                if (cell.Width == 0)
++                    continue;
++                string content = cell.CodePoint == 0 ? " " : cell.Content;
++                text.Append(content);
++                for (int i = 0; i < content.Length; i++)
++                    columns.Add(x);
++            }
++
++            IReadOnlyList<TextHighlight> spans;
++            try { spans = provider(text.ToString()); }
++            catch (Exception) { return null; } // a host callback must not cost the frame
++            if (spans.Count == 0)
++                return null;
++
++            var result = new IBrush?[cols];
++            foreach (var span in spans)
++            {
++                int end = (int)Math.Min(columns.Count, (long)span.Start + span.Length);
++                for (int i = Math.Max(0, span.Start); i < end; i++)
++                    result[columns[i]] ??= span.Brush;
++            }
++            return result;
++        }
++
++        /// <summary>The brush of a column; the grid may have grown since the row was read.</summary>
++        private static IBrush? HighlightAt(IBrush?[]? highlights, int column) =>
++            highlights is not null && column < highlights.Length ? highlights[column] : null;
++
++        /// <summary>Whether a highlight may recolour this cell: only text in the default colours. On a
++        /// background the program chose, the highlight could be the very same colour.</summary>
++        private static bool TakesHighlight(BufferCell cell) =>
++            cell.Attributes.GetFgColor() == 256 && cell.Attributes.GetBgColor() == 257 && !cell.Attributes.IsInverse();
++
++        /// <summary>The filtered paste: see <see cref="PasteFilter"/>.</summary>
++        private async Task PasteFilteredAsync(string? text, Func<string, Task<string?>> filter)
++        {
++            if (string.IsNullOrEmpty(text))
++                return;
++
++            var session = SessionId;
++            var review = filter(text);
++            // A keyboard selection is replaced only when nothing could have happened in between: its
++            // deletion is keystrokes counted from where the cursor was.
++            bool immediate = review.IsCompletedSuccessfully;
++            var reviewed = await review;
++
++            // Reviewed for the process the user was looking at, not for one attached since.
++            if (string.IsNullOrEmpty(reviewed) || _ptyConnection == null || SessionId != session)
++                return;
++
++            if (_terminal.BracketedPasteMode)
++                reviewed = $"\u001b[200~{reviewed}\u001b[201~";
++            await SendToPtyAsync((immediate ? TakeKeyboardSelectionDeletion() : string.Empty) + reviewed);
++        }
++    }
++}
+--- a/TerminalView.Input.cs
++++ b/TerminalView.Input.cs
+@@ -77,7 +77,13 @@
+ 
+             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+             if (clipboard == null)
++                return;
++
++            if (PasteFilter is { } filter)
++            {
++                await PasteFilteredAsync(await clipboard.TryGetTextAsync(), filter);
+                 return;
++            }
+ 
+             // Bracketed paste MIME: with mode 5522 set the paste is ANNOUNCED — the emulator
+             // emits the notification triple and the application fetches the formats it wants
+@@ -192,6 +198,8 @@
+                 return false;
+ 
+             var text = _terminal.Selection.GetSelectionText();
++            if (CopyFilter is { } copyFilter)
++                text = copyFilter(text);
+             if (!string.IsNullOrEmpty(text))
+             {
+                 // Normalize line endings for the current platform
+--- a/TerminalView.Pty.cs
++++ b/TerminalView.Pty.cs
+@@ -148,8 +148,11 @@
+             // Same ordering as the spawn path: publish the connection, SUBSCRIBE, then start the reader. An
+             // attached connection may already have a live process behind it, so an exit can arrive immediately
+             // — subscribing after the reader starts is a window in which it is missed entirely.
++            ApplyArrangedGridSize();
+             var sessionId = InstallConnection(connection);
+             connection.ProcessExited += OnPtyProcessExited;
++            // Layout can finish while an external/async-created PTY still has its spawn size.
++            connection.Resize(Math.Max(1, _terminal.Cols), Math.Max(1, _terminal.Rows));
+ 
+             // Bytes a detached reader stole before this attach are the EARLIEST unread output, so
+             // replaying them before our own reader starts preserves stream order exactly -- consume
+@@ -286,17 +289,43 @@
+         /// caller so one guard covers both paths. Design.IsDesignMode is set by the previewer's
+         /// entry point before the AppBuilder runs, so it is already true when the first control loads.
+         /// </remarks>
+-        public async Task LaunchProcess()
++        private Task? _launchTask;
++
++        public Task LaunchProcess()
+         {
++            // Explicit startup and Loaded may arrive in the same layout turn. Publish
++            // the task before starting work so reentrant callers join one launch.
++            if (_launchTask is { IsCompleted: false }) return _launchTask;
++            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
++            _launchTask = completion.Task;
++            _ = CompleteLaunchAsync(completion);
++            return completion.Task;
++        }
++
++        private async Task CompleteLaunchAsync(TaskCompletionSource completion)
++        {
++            try { await LaunchProcessCoreAsync(); completion.TrySetResult(); }
++            catch (Exception ex) { completion.TrySetException(ex); }
++        }
++
++        private async Task LaunchProcessCoreAsync()
++        {
+             if (Design.IsDesignMode)
+                 return;
+ 
++            // A template can already contain this view before OnInitialized creates
++            // the emulator. Await readiness without blocking the UI layout that creates it.
++            try { await _initialized.Task; }
++            catch (OperationCanceledException) when (_disposed) { return; }
++            if (_disposed) return;
+             CleanupProcess();
+             _externalConnection = false;   // this view owns what it spawns
++            var launchCts = new CancellationTokenSource();
++            var readerToken = launchCts.Token;
++            _processCts = launchCts;
+ 
+             try
+             {
+-                _processCts = new CancellationTokenSource();
+                 // NOT reset here: the interlock is armed by InstallConnection, together with the connection
+                 // itself. Arming it early opens a window in which the OUTGOING connection is still the live one
+                 // AND the flag is clear, which is the same defect with the operands swapped.
+@@ -362,11 +391,19 @@
+                     options.CommandLine = ProcessArgs.ToArray();
+                 }
+ 
+-                var spawned = await PtyProvider.SpawnAsync(options, _processCts.Token);
++                var spawned = await PtyProvider.SpawnAsync(options, readerToken);
++                if (_disposed || readerToken.IsCancellationRequested || !ReferenceEquals(_processCts, launchCts))
++                {
++                    try { spawned.Kill(); } finally { spawned.Dispose(); }
++                    return;
++                }
++                ApplyArrangedGridSize();
+                 var spawnedSessionId = InstallConnection(spawned);
+ 
+                 // Subscribe to process exit event for reliable exit detection
+                 spawned.ProcessExited += OnPtyProcessExited;
++                if (options.Cols != _terminal.Cols || options.Rows != _terminal.Rows)
++                    spawned.Resize(Math.Max(1, _terminal.Cols), Math.Max(1, _terminal.Rows));
+ 
+                 // Start reading from the PTY connection, and do not continue until the loop is actually
+                 // reading. The loop is handed THIS connection so a relaunch cannot redirect it onto the next
+@@ -382,7 +419,7 @@
+                 // idle developer machine and was near-total on a contended CI box.
+                 var readerUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                 _readLoopTask = Task.Factory.StartNew(
+-                    () => ReadPtyOutputAsync(spawned, spawnedSessionId, _processCts.Token, readerUp),
++                    () => ReadPtyOutputAsync(spawned, spawnedSessionId, readerToken, readerUp),
+                     CancellationToken.None,
+                     TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+                     TaskScheduler.Default).Unwrap();
+@@ -391,11 +428,15 @@
+                 // used to rather than hanging the caller that opened it.
+                 await Task.WhenAny(readerUp.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true);
+             }
++            catch (OperationCanceledException) when (readerToken.IsCancellationRequested) { }
+             catch (Exception ex)
+             {
++                // Type and call stack aid Release diagnostics without recording argv,
++                // environment values or possibly sensitive exception messages.
++                Console.Error.WriteLine($"Terminal launch failed: {ex.GetType().FullName}\n{ex.StackTrace}");
+                 await Dispatcher.UIThread.InvokeAsync(() =>
+                 {
+-                    _terminal.WriteLine($"Error launching process: {ex.Message}\n");
++                    if (!_disposed) _terminal.WriteLine($"Error launching process: {ex.Message}\n");
+                 });
+             }
+         }
+--- a/TerminalView.Viewport.cs
++++ b/TerminalView.Viewport.cs
+@@ -151,8 +151,14 @@
+         /// <returns>How many matches, capped at <see cref="XT.Search.BufferSearch.MaxHits"/>.</returns>
+         public int FindInBuffer(string needle, XT.Search.SearchOptions options = default)
+         {
+-            _search ??= new XT.Search.BufferSearch(_terminal);
+-            var count = _search.Find(needle, options);
++            int count;
++            // The search reads the buffer and its hits move when the buffer trims; both happen on the
++            // reader thread inside this lock.
++            lock (_terminalLock)
++            {
++                _search ??= new XT.Search.BufferSearch(_terminal);
++                count = _search.Find(needle, options);
++            }
+             _currentMatchId = -1;
+             InvalidateVisual();
+             return count;
+@@ -167,7 +173,8 @@
+         /// <summary>Forgets the search and removes the highlights.</summary>
+         public void ClearSearch()
+         {
+-            _search?.Clear();
++            lock (_terminalLock)
++                _search?.Clear();
+             _currentMatchId = -1;
+             InvalidateVisual();
+         }
+@@ -178,7 +185,9 @@
+                 return false;
+ 
+             XT.Search.SearchHit hit;
+-            var moved = next ? _search.TryMoveNext(out hit) : _search.TryMovePrevious(out hit);
++            bool moved;
++            lock (_terminalLock)
++                moved = next ? _search.TryMoveNext(out hit) : _search.TryMovePrevious(out hit);
+             if (!moved)
+                 return false;
+ 
+--- a/TerminalView.cs
++++ b/TerminalView.cs
+@@ -33,6 +33,14 @@
+ 
+     public partial class TerminalView : Control, ICustomHitTest, IDisposable
+     {
++        private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
++        public static readonly StyledProperty<bool> AutoStartOnLoadProperty =
++            AvaloniaProperty.Register<TerminalView, bool>(nameof(AutoStartOnLoad), true);
++        public bool AutoStartOnLoad
++        {
++            get => GetValue(AutoStartOnLoadProperty);
++            set => SetValue(AutoStartOnLoadProperty, value);
++        }
+         /// <summary>
+         /// Avalonia hit-tests what a control actually DREW, not the rectangle it occupies — the same
+         /// rule that makes a <c>Grid</c> with no Background invisible to the pointer. <see cref="Render"/> paints
+@@ -696,7 +704,7 @@
+         /// anything wearing the foreground is not one.
+         /// </remarks>
+         public static readonly FontFamily DefaultFontFamily = new FontFamily(
+-            "Cascadia Mono,Cascadia Code,Consolas,Menlo,DejaVu Sans Mono,Liberation Mono,Courier New," +
++            "MesloLGS NF,JetBrainsMono Nerd Font,Hack Nerd Font,Cascadia Mono,Cascadia Code,Consolas,Menlo,DejaVu Sans Mono,Liberation Mono,Courier New," +
+             "Segoe UI Emoji,Apple Color Emoji,Noto Color Emoji,monospace");
+ 
+         public static readonly StyledProperty<FontFamily> FontFamilyProperty =
+@@ -1537,6 +1545,7 @@
+ 
+             // Initialize IME client
+             _inputMethodClient = new TerminalInputMethodClient(this);
++            _initialized.TrySetResult();
+         }
+ 
+         /// <summary>
+@@ -2171,6 +2180,8 @@
+             if (change.Property == OptionsProperty && _terminal != null &&
+                 !ReferenceEquals(change.NewValue, _terminal.Options))
+             {
++                if (change.NewValue is XT.Options.TerminalOptions requested)
++                    _terminal.Options.ReflowOnResize = requested.ReflowOnResize;
+                 SetCurrentValue(OptionsProperty, _terminal.Options);
+                 return;
+             }
+@@ -2257,7 +2268,7 @@
+ 
+         private async void OnLoaded(object? sender, RoutedEventArgs e)
+         {
+-            if (_ptyConnection == null && !string.IsNullOrEmpty(Process))
++            if (AutoStartOnLoad && _ptyConnection == null && !string.IsNullOrEmpty(Process))
+             {
+                 await LaunchProcess();
+             }
+@@ -2336,6 +2347,7 @@
+                 return;
+ 
+             _disposed = true;
++            _initialized.TrySetCanceled();
+ 
+             // The uploads go HERE and not on visual detach: detachment happens during ordinary
+             // initialisation and reparenting, both followed by more painting. A frame still in flight
+@@ -3672,59 +3684,36 @@
+             InvalidateVisual();
+         }
+ 
++        private bool _gridResizeQueued;
+         protected override Size ArrangeOverride(Size finalSize)
+         {
+-            // Calculate how many columns fit in the allocated width
+-            if (_charWidth > 0)
++            // One layout transaction may arrange several intermediate column/row combinations.
++            // Commit the model AND the PTY once after layout, never debounce only the backend.
++            if (!_gridResizeQueued && !_disposed)
+             {
+-                // The gutter is taken out of the width before columns are counted, so turning one on
+-                // narrows the terminal rather than pushing text off the right-hand edge. Clamped the
+-                // same way Render and PointerColumn clamp it -- a negative width must not mint columns.
+-                int newCols = Math.Max(1, (int)((finalSize.Width - Math.Max(0, GutterWidth)) / _charWidth));
++                _gridResizeQueued = true;
++                Dispatcher.UIThread.Post(ApplyArrangedGridSize, DispatcherPriority.Background);
++            }
++            return finalSize;
++        }
+ 
+-                // The status row comes off the height the way the gutter comes off the width: before
+-                // anything is counted, so the grid never contains it. An application told it has 24
+-                // rows must have 24 rows it can actually write to -- a status line carved out of the
+-                // grid afterwards would leave it addressing a row that is not there.
+-                int newRows = Math.Max(1, (int)((finalSize.Height - StatusLineHeight) / _charHeight));
+-
+-                // Only resize if dimensions have changed
+-                if (newCols != _terminal.Cols || newRows != _terminal.Rows)
+-                {
+-                    // Under the lock, like every other mutation of the emulator. A resize reflows the
+-                    // whole buffer, and the pty reader can be inside Terminal.Write at the same
+-                    // moment -- one thread rewriting the lines another is appending to. Layout runs
+-                    // on the UI thread and output arrives on the reader thread, so the two meet
+-                    // whenever a window is resized while anything is printing.
+-                    lock (_terminalLock)
+-                    {
+-                        // Marked as OURS for the duration. Terminal.Resize raises Resized
+-                        // synchronously, and OnTerminalResized answers a program's resize by asking
+-                        // the host for a new window size -- which is right for DECCOLM and wrong
+-                        // here, where the grid was derived FROM the window size a moment ago.
+-                        // Without the flag every drag of the window edge would bounce back as a
+-                        // request to snap the window to an exact multiple of the cell.
+-                        _regridFromLayout = true;
+-                        try
+-                        {
+-                            _terminal.Resize(newCols, newRows);
+-                        }
+-                        finally
+-                        {
+-                            _regridFromLayout = false;
+-                        }
+-                    }
+-
+-                    // Outside it: this is a write to the pty, which has its own serialisation, and
+-                    // holding the terminal lock across a call into the platform would block the
+-                    // reader for no reason.
+-                    _ptyConnection?.Resize(newCols, newRows);
+-
+-                    RaisePropertyChanged(ViewportLinesProperty, default(int), ViewportLines);
+-                }
++        private void ApplyArrangedGridSize()
++        {
++            _gridResizeQueued = false;
++            if (_disposed || _terminal == null || !IsEffectivelyVisible || Bounds.Width <= 0 || Bounds.Height <= 0 || _charWidth <= 0 || _charHeight <= 0) return;
++            int cols = Math.Max(1, (int)((Bounds.Width - Math.Max(0, GutterWidth)) / _charWidth));
++            int rows = Math.Max(1, (int)((Bounds.Height - StatusLineHeight) / _charHeight));
++            if (cols == _terminal.Cols && rows == _terminal.Rows) return;
++            var connection = _ptyConnection;
++            lock (_terminalLock)
++            {
++                _regridFromLayout = true;
++                try { _terminal.Resize(cols, rows); }
++                finally { _regridFromLayout = false; }
+             }
+-
+-            return finalSize;
++            if (ReferenceEquals(connection, _ptyConnection)) connection?.Resize(cols, rows);
++            RaisePropertyChanged(ViewportLinesProperty, default(int), ViewportLines);
++            InvalidateVisual();
+         }
+ 
+ 
+@@ -3786,6 +3775,8 @@
+             // cache stores finished draw calls, and the blocks are deliberately NOT drawn here.
+             hasSizedRuns = line.HasSizedRuns;
+ 
++            var highlights = HighlightColumns(line);
++
+             for (int x = 0; x < _terminal.Cols;)
+             {
+                 if (x >= line.Length)
+@@ -3805,6 +3796,7 @@
+                 int[]? blocks = null;
+                 bool fallbackRun = false;
+                 var runHasBackdrop = CoveredByBackdrop(painted, x, x + Math.Max(1, cell.Width));
++                var runHighlight = HighlightAt(highlights, x);
+ 
+                 // Cells under a Sixel are drawn like any others, as xterm draws them: the picture goes
+                 // over them, so an opaque pixel hides the cell and one left unset under background
+@@ -3877,6 +3869,7 @@
+                             // coverage changes so suppressing that fill affects only columns with a
+                             // negative-z picture behind them, not every same-style cell beside it.
+                             || CoveredByBackdrop(painted, x, x + 1) != runHasBackdrop
++                            || !ReferenceEquals(HighlightAt(highlights, x), runHighlight)
+                             || (hasSizedRuns && line.TryGetSizedRunAt(x, out _))
+                             || IsBlockCell(currentCell) != blockRun
+                             || (!blockRun && x > runStartX && (fallbackRun || NeedsFallback(currentCell, primaryMap))))
+@@ -3930,6 +3923,8 @@
+ 
+                 var background = cell.GetBackgroundBrush(_palette, this.Background);
+                 var foreground = cell.GetForegroundBrush(_palette, this.Foreground, _boldIsBright);
++                if (runHighlight is not null && TakesHighlight(cell))
++                    foreground = runHighlight;
+                 // Apply cell-level inverse attribute
+                 // Whether this run ends up drawn with the colours swapped. Once they are, the fill is no
+                 // longer optional: the "background" being painted is the text colour.
+--- a/Themes/Generic.axaml
++++ b/Themes/Generic.axaml
+@@ -19,7 +19,7 @@
+     <Style Selector="local|TerminalControl">
+         <Setter Property="Background" Value="Black"/>
+         <Setter Property="Foreground" Value="White"/>
+-        <Setter Property="FontFamily" Value="Cascadia Mono,Cascadia Code,Consolas,Menlo,DejaVu Sans Mono,Liberation Mono,Courier New,Segoe UI Emoji,Apple Color Emoji,Noto Color Emoji,monospace"/>
++        <Setter Property="FontFamily" Value="MesloLGS NF,JetBrainsMono Nerd Font,Hack Nerd Font,Cascadia Mono,Cascadia Code,Consolas,Menlo,DejaVu Sans Mono,Liberation Mono,Courier New,Segoe UI Emoji,Apple Color Emoji,Noto Color Emoji,monospace"/>
+         <Setter Property="FocusAdorner" Value="{x:Null}"/>
+         <Setter Property="Template">
+             <ControlTemplate>
+@@ -45,6 +45,7 @@
+                                        Background="{TemplateBinding Background}"
+                                        SelectionBrush="{TemplateBinding SelectionBrush}"
+                                        Process="{TemplateBinding Process}"
++                                       AutoStartOnLoad="{TemplateBinding AutoStartOnLoad}"
+                                        StartingDirectory="{TemplateBinding StartingDirectory}"
+                                        ProcessArgs="{TemplateBinding ProcessArgs}"
+                                        BufferSize="{TemplateBinding BufferSize}"

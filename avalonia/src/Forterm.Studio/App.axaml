@@ -1,0 +1,24 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Forterm.Studio.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Forterm/Themes/Palette.axaml"/>
+        <ResourceInclude Source="avares://Forterm/Themes/Icons.axaml"/>
+        <ResourceInclude Source="avares://Forterm/Themes/ControlThemes.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#3FB176" RegionColor="#191919"/>
+        <ColorPaletteResources x:Key="Light" Accent="#2FA765" RegionColor="#FFFFFF"/>
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
+    <StyleInclude Source="avares://Forterm/Themes/Controls.axaml"/>
+  </Application.Styles>
+</Application>

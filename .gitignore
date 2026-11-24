@@ -1,0 +1,22 @@
+node_modules/
+dist/
+release/
+build/launchers/
+test-results/
+.DS_Store
+*.log
+checkpoints/
+
+# Generated native self-extracting portable payload
+native/cmd/portable/payload.zip
+
+# Local XTerminal reference screenshots: contain real internal/public IPs and host names. Never commit.
+资料/
+
+# Test and build outputs
+TestResults/
+__pycache__/
+avalonia/tooling/fixture-venv/
+
+# Build outputs, packages and native screenshots of the frozen Go generation (2.6 GB, local record only)
+native/evidence/

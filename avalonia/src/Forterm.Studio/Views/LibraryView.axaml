@@ -1,0 +1,392 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Forterm.Studio.ViewModels"
+             xmlns:c="using:Forterm.Studio.Controls"
+             x:Class="Forterm.Studio.Views.LibraryView"
+             x:DataType="vm:LibraryViewModel">
+  <UserControl.Styles>
+    <!-- Protocol tabs: centred text with a 2px accent underline when active. -->
+    <Style Selector="Button.proto-tab">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="MinWidth" Value="56"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.proto-tab:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource St.Text}"/></Style>
+    <Style Selector="Button.proto-tab.active /template/ ContentPresenter"><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+    <Style Selector="Button.proto-tab.active"><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+
+    <!-- Small bordered tool buttons, all 26px high. -->
+    <Style Selector="Button.tool">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.Text}"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="Padding" Value="9,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource St.Line}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.tool:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/><Setter Property="BorderBrush" Value="{DynamicResource St.Pressed}"/></Style>
+    <Style Selector="Button.tool.square"><Setter Property="Width" Value="26"/><Setter Property="Padding" Value="0"/></Style>
+    <Style Selector="Button.tool.danger"><Setter Property="Foreground" Value="{DynamicResource St.Danger}"/></Style>
+
+    <Style Selector="Button.connect">
+      <Setter Property="Background" Value="{DynamicResource St.Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.OnAccent}"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.connect:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentHover}"/><Setter Property="Foreground" Value="{DynamicResource St.OnAccent}"/></Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.Text}"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="Padding" Value="7,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="Button.link.dim"><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/></Style>
+    <Style Selector="Button.sort">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Button.sort:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource St.Text}"/></Style>
+    <Style Selector="TextBlock.head"><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+
+    <Style Selector="TextBox.search">
+      <Setter Property="Background" Value="{DynamicResource St.Card}"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+
+    <Style Selector="ListBox.hosts ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="44"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource St.Line}"/>
+    </Style>
+    <Style Selector="ListBox.hosts ListBoxItem:selected /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="ListBox.hosts ListBoxItem:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="TextBlock.good"><Setter Property="Foreground" Value="#58B421"/></Style>
+    <Style Selector="TextBlock.slow"><Setter Property="Foreground" Value="{DynamicResource St.Warning}"/></Style>
+    <Style Selector="TextBlock.failed"><Setter Property="Foreground" Value="{DynamicResource St.Danger}"/></Style>
+  </UserControl.Styles>
+
+  <DockPanel Background="{DynamicResource St.Panel}">
+    <!-- Protocol tabs + import/export -->
+    <Border DockPanel.Dock="Top" Height="38" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,0,1">
+      <DockPanel Margin="14,0,12,0">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Button Classes="link dim" Command="{Binding AccountsCommand}" AutomationProperties.Name="堡垒机账户">
+            <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Key}" Width="12" Height="12"/><TextBlock Text="堡垒机账户" VerticalAlignment="Center"/></StackPanel>
+          </Button>
+          <Button Classes="link dim" Command="{Binding ImportCommand}" AutomationProperties.Name="导入连接">
+            <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Import}" Width="12" Height="12"/><TextBlock Text="导入" VerticalAlignment="Center"/></StackPanel>
+          </Button>
+          <Button Classes="link dim" Command="{Binding ExportAllCommand}" AutomationProperties.Name="导出全部连接">
+            <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Export}" Width="12" Height="12"/><TextBlock Text="导出全部" VerticalAlignment="Center"/></StackPanel>
+          </Button>
+        </StackPanel>
+        <ItemsControl ItemsSource="{Binding Tabs}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:LibraryViewModel+ProtocolTab">
+              <Button Classes="proto-tab" Classes.active="{Binding IsActive}" Command="{Binding SelectCommand}" AutomationProperties.Name="{Binding Label}">
+                <Grid>
+                  <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8,0"/>
+                  <Border Height="2" CornerRadius="1" VerticalAlignment="Bottom" Background="{DynamicResource St.Accent}" IsVisible="{Binding IsActive}" Margin="4,0"/>
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Background="{DynamicResource St.Notice}" IsVisible="{Binding HasNotice}" Padding="12,6">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="flat" Command="{Binding DismissNoticeCommand}" AutomationProperties.Name="关闭提示">
+          <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="12" Height="12"/>
+        </Button>
+        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
+
+    <Panel>
+    <!-- 隧道 tab -->
+    <Panel IsVisible="{Binding IsTunnelTab}">
+    <DockPanel DataContext="{Binding Tunnels}" x:DataType="vm:TunnelsViewModel" Margin="14,10,14,0">
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Height="40">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <c:StrokeIcon Data="{StaticResource Icon.Tunnel}" Width="15" Height="15" Brush="{DynamicResource St.Accent}"/>
+          <TextBlock Text="隧道（端口转发）" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <TextBlock Text="只监听 127.0.0.1；手动启动和停止，断开后不自动重连" Classes="dim" FontSize="11.5" VerticalAlignment="Center"/>
+        </StackPanel>
+        <Button Grid.Column="1" Classes="connect" Command="{Binding NewCommand}" AutomationProperties.Name="新建隧道">
+          <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="11" Height="11" Thickness="2.4" Brush="{DynamicResource St.OnAccent}"/><TextBlock Text="新建隧道" VerticalAlignment="Center"/></StackPanel>
+        </Button>
+      </Grid>
+      <Border DockPanel.Dock="Top" IsVisible="{Binding HasNotice}" Background="{DynamicResource St.Notice}" CornerRadius="5" Padding="8,5" Margin="0,0,0,8">
+        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" FontSize="12"/>
+      </Border>
+      <Border DockPanel.Dock="Top" Height="34" Background="{DynamicResource St.Card}" CornerRadius="6">
+        <Grid ColumnDefinitions="2*,2*,*,2*,2*,230" Margin="12,0">
+          <TextBlock Classes="head" Text="名称"/>
+          <TextBlock Grid.Column="1" Classes="head" Text="经由连接"/>
+          <TextBlock Grid.Column="2" Classes="head" Text="本地监听"/>
+          <TextBlock Grid.Column="3" Classes="head" Text="远程目标"/>
+          <TextBlock Grid.Column="4" Classes="head" Text="状态"/>
+          <TextBlock Grid.Column="5" Classes="head" Text="操作"/>
+        </Grid>
+      </Border>
+      <Panel>
+        <ItemsControl ItemsSource="{Binding Rows}" Margin="0,2,0,0">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:TunnelRowViewModel">
+              <Border BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="2*,2*,*,2*,2*,230" Height="44" Margin="12,0">
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource St.TextStrong}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Via}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5"/>
+                  <TextBlock Grid.Column="2" Text="{Binding Local}" VerticalAlignment="Center" FontSize="12.5"/>
+                  <TextBlock Grid.Column="3" Text="{Binding Remote}" VerticalAlignment="Center" FontSize="12.5" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="4" Text="{Binding Status}" VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" Classes.good="{Binding IsRunning}"/>
+                  <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button Classes="connect" Content="启动" Command="{Binding StartCommand}" IsVisible="{Binding IsStopped}" IsEnabled="{Binding !IsBusy}" Margin="0,0,4,0" AutomationProperties.Name="启动隧道"/>
+                    <Button Classes="tool" Content="停止" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" Margin="0,0,4,0" AutomationProperties.Name="停止隧道"/>
+                    <Button Classes="link" Content="编辑" Command="{Binding EditCommand}"/>
+                    <Button Classes="link" Content="删除" Command="{Binding DeleteCommand}" Foreground="{DynamicResource St.Danger}"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="0,0,0,60">
+          <c:StrokeIcon Data="{StaticResource Icon.Tunnel}" Width="32" Height="32" Opacity="0.5" HorizontalAlignment="Center"/>
+          <TextBlock Text="还没有隧道" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+          <TextBlock Text="把服务器所在网络里的端口（例如数据库）转发到本机 127.0.0.1，或在本机开一个 SOCKS 代理，经由已保存的 SSH 连接。" Classes="dim" FontSize="12" TextWrapping="Wrap" MaxWidth="380" TextAlignment="Center"/>
+        </StackPanel>
+      </Panel>
+    </DockPanel>
+    </Panel>
+
+    <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding IsHostTab}">
+      <!-- Sidebar: groups and hosts -->
+      <Border Width="236" IsVisible="{Binding SidebarExpanded}" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,1,0">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" Height="48" ColumnDefinitions="*,Auto" Margin="8,0,10,0">
+            <Button Classes="link dim" Command="{Binding ToggleSidebarCommand}" HorizontalAlignment="Left" AutomationProperties.Name="收起分组栏">
+              <StackPanel Orientation="Horizontal" Spacing="6"><c:StrokeIcon Data="{StaticResource Icon.Menu}" Width="12" Height="12"/><TextBlock Text="收起" VerticalAlignment="Center"/></StackPanel>
+            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+              <Button Classes="tool square" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新" AutomationProperties.Name="刷新连接库">
+                <c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="12" Height="12"/>
+              </Button>
+              <Button Classes="tool" Command="{Binding NewGroupCommand}" AutomationProperties.Name="新建分组">
+                <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="10" Height="10" Thickness="2.4"/><TextBlock Text="分组" VerticalAlignment="Center"/></StackPanel>
+              </Button>
+              <Button Classes="tool" Command="{Binding NewConnectionCommand}" AutomationProperties.Name="新建连接">
+                <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="10" Height="10" Thickness="2.4"/><TextBlock Text="{Binding SelectedTab.Label}" VerticalAlignment="Center"/></StackPanel>
+              </Button>
+            </StackPanel>
+          </Grid>
+          <TreeView Name="Tree" Classes="library" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Margin="0,0,0,8" AutomationProperties.Name="连接分组">
+            <TreeView.Styles>
+              <Style Selector="TreeViewItem" x:DataType="vm:LibraryNode">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+              </Style>
+            </TreeView.Styles>
+            <TreeView.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="新建分组" Command="{Binding NewGroupCommand}"/>
+                <MenuItem Header="新建子分组" Command="{Binding NewSubGroupCommand}" IsEnabled="{Binding CanEditGroup}"/>
+                <MenuItem Header="重命名分组" Command="{Binding RenameGroupCommand}" IsEnabled="{Binding CanEditGroup}"/>
+                <MenuItem Header="删除分组" Command="{Binding DeleteGroupCommand}" IsEnabled="{Binding CanEditGroup}"/>
+              </ContextMenu>
+            </TreeView.ContextMenu>
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate DataType="vm:LibraryNode" ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="7" Height="28">
+                  <c:StrokeIcon Data="{StaticResource Icon.FolderOutline}" Width="14" Height="14" Thickness="1.6" IsVisible="{Binding IsFolder}" VerticalAlignment="Center" Opacity="0.75"/>
+                  <c:StrokeIcon Data="{StaticResource Icon.Server}" Width="13" Height="13" Thickness="1.6" IsVisible="{Binding IsHost}" VerticalAlignment="Center" Opacity="0.6"/>
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                  <TextBlock Text="{Binding CountLabel}" VerticalAlignment="Center" Classes="dim" FontSize="11.5"/>
+                </StackPanel>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </DockPanel>
+      </Border>
+
+      <!-- Host table -->
+      <DockPanel Grid.Column="1">
+        <Grid DockPanel.Dock="Top" Height="52" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="14,0,12,0">
+          <Button Classes="tool square" Command="{Binding ToggleSidebarCommand}" IsVisible="{Binding SidebarCollapsed}" ToolTip.Tip="展开分组栏" AutomationProperties.Name="展开分组栏" Margin="0,0,10,0">
+            <c:StrokeIcon Data="{StaticResource Icon.Menu}" Width="12" Height="12"/>
+          </Button>
+          <TextBlock Grid.Column="1" Text="{Binding CurrentLabel}" VerticalAlignment="Center" Margin="0,0,14,0" MaxWidth="240" TextTrimming="CharacterEllipsis" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource St.TextStrong}"/>
+          <TextBox Grid.Column="2" Classes="search" Width="320" Text="{Binding Search}" PlaceholderText="搜索名称、地址、备注，或 root@10.0" VerticalAlignment="Center" AutomationProperties.Name="搜索连接">
+            <TextBox.InnerLeftContent><c:StrokeIcon Data="{StaticResource Icon.Search}" Width="13" Height="13" Margin="10,0,2,0" Opacity="0.7"/></TextBox.InnerLeftContent>
+          </TextBox>
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Border IsVisible="{Binding HasChecked}" Background="{DynamicResource St.Card}" CornerRadius="6" Padding="10,0,4,0" Height="32">
+              <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="{Binding CheckedLabel}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource St.Accent}" Margin="0,0,4,0"/>
+                <Button Classes="link" Command="{Binding ExportCheckedCommand}" AutomationProperties.Name="导出选中">
+                  <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Export}" Width="11" Height="11"/><TextBlock Text="导出" VerticalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Classes="link" Command="{Binding DuplicateCheckedCommand}" AutomationProperties.Name="复制选中">
+                  <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="11" Height="11"/><TextBlock Text="复制" VerticalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Classes="link" Command="{Binding ConnectCheckedCommand}" AutomationProperties.Name="并发连接选中">
+                  <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Play}" Width="11" Height="11"/><TextBlock Text="并发" VerticalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Classes="link" Command="{Binding DeleteCheckedCommand}" Foreground="{DynamicResource St.Danger}" AutomationProperties.Name="删除选中">
+                  <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Trash}" Width="11" Height="11"/><TextBlock Text="删除" VerticalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Classes="flat" Command="{Binding ClearCheckedCommand}" ToolTip.Tip="取消选择" AutomationProperties.Name="取消选择">
+                  <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+                </Button>
+              </StackPanel>
+            </Border>
+            <Button Classes="tool square" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新延迟" AutomationProperties.Name="刷新延迟">
+              <c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="12" Height="12"/>
+            </Button>
+            <Button Classes="connect" Command="{Binding NewConnectionCommand}" ToolTip.Tip="{Binding NewConnectionLongLabel}" AutomationProperties.Name="新建连接">
+              <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="11" Height="11" Thickness="2.4" Brush="{DynamicResource St.OnAccent}"/><TextBlock Text="新建" VerticalAlignment="Center"/></StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <!-- Column header (hidden while the library is empty) -->
+        <Border DockPanel.Dock="Top" Height="36" Background="{DynamicResource St.Card}" IsVisible="{Binding !ShowLibraryEmpty}" Margin="12,0" CornerRadius="6">
+          <Grid ColumnDefinitions="40,32,60,96,2*,2*,2*,2*,196" Margin="2,0">
+            <CheckBox Classes="small" IsChecked="{Binding AllChecked}" HorizontalAlignment="Center" AutomationProperties.Name="全选"/>
+            <TextBlock Grid.Column="2" Classes="head" Text="系统"/>
+            <Button Grid.Column="3" Classes="sort" Command="{Binding SortCommand}" CommandParameter="Latency">
+              <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="延迟"/><c:StrokeIcon Data="{StaticResource Icon.Sort}" Width="10" Height="10" Opacity="0.7"/></StackPanel>
+            </Button>
+            <Button Grid.Column="4" Classes="sort" Command="{Binding SortCommand}" CommandParameter="Name">
+              <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="名称"/><c:StrokeIcon Data="{StaticResource Icon.Sort}" Width="10" Height="10" Opacity="0.7"/></StackPanel>
+            </Button>
+            <Button Grid.Column="5" Classes="sort" Command="{Binding SortCommand}" CommandParameter="Address">
+              <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="地址"/><c:StrokeIcon Data="{StaticResource Icon.Sort}" Width="10" Height="10" Opacity="0.7"/></StackPanel>
+            </Button>
+            <TextBlock Grid.Column="6" Classes="head" Text="信息" ToolTip.Tip="只显示已打开会话的实时数据；不会为了采集而后台登录"/>
+            <TextBlock Grid.Column="7" Classes="head" Text="备注"/>
+            <TextBlock Grid.Column="8" Classes="head" Text="操作" Margin="12,0,0,0"/>
+          </Grid>
+        </Border>
+
+        <Panel>
+          <ListBox Name="Hosts" Classes="hosts" ItemsSource="{Binding Rows}" Background="Transparent" Margin="12,2,12,0" AutomationProperties.Name="连接列表">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="vm:HostRowViewModel">
+                <Grid ColumnDefinitions="40,32,60,96,2*,2*,2*,2*,196" Height="44" Margin="2,0" Background="Transparent">
+                  <CheckBox Classes="small" IsChecked="{Binding IsChecked}" HorizontalAlignment="Center" AutomationProperties.Name="选择"/>
+                  <Button Grid.Column="1" Classes="flat" Command="{Binding ToggleFavoriteCommand}" ToolTip.Tip="收藏" AutomationProperties.Name="收藏" HorizontalAlignment="Center">
+                    <Panel>
+                      <c:StrokeIcon Data="{StaticResource Icon.Star}" Width="14" Height="14" Thickness="1.6" IsVisible="{Binding !Favorite}" Opacity="0.7"/>
+                      <c:StrokeIcon Data="{StaticResource Icon.Star}" Width="14" Height="14" Filled="True" Brush="{DynamicResource St.Warning}" IsVisible="{Binding Favorite}"/>
+                    </Panel>
+                  </Button>
+                  <Border Grid.Column="2" Background="{DynamicResource St.AccentSoft}" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Badge}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource St.Accent}"/>
+                  </Border>
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <c:StrokeIcon Data="{StaticResource Icon.Clock}" Width="12" Height="12" Thickness="1.8" Opacity="0.7"/>
+                    <TextBlock Text="{Binding Latency}" FontSize="12" Classes.good="{Binding LatencyGood}" Classes.slow="{Binding LatencySlow}" Classes.failed="{Binding LatencyFailed}"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="4" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" Foreground="{DynamicResource St.TextStrong}"/>
+                  <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Address}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5"/>
+                    <Button Classes="flat" Padding="3" Command="{Binding CopyAddressCommand}" ToolTip.Tip="复制地址" AutomationProperties.Name="复制地址">
+                      <c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="11" Height="11" Thickness="1.8"/>
+                    </Button>
+                  </StackPanel>
+                  <TextBlock Grid.Column="6" Text="{Binding Info}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11.5" Foreground="{DynamicResource St.Accent}" Margin="0,0,8,0"/>
+                  <TextBlock Grid.Column="7" Text="{Binding Note}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Classes="dim" FontSize="12.5" Margin="0,0,8,0"/>
+                  <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Button Classes="connect" Content="连接" Command="{Binding ConnectCommand}" AutomationProperties.Name="连接" Margin="0,0,4,0"/>
+                    <Button Classes="link" Content="编辑" Command="{Binding EditCommand}" AutomationProperties.Name="编辑"/>
+                    <Button Classes="link" AutomationProperties.Name="更多">
+                      <StackPanel Orientation="Horizontal" Spacing="2"><TextBlock Text="更多" VerticalAlignment="Center"/><c:StrokeIcon Data="{StaticResource Icon.More}" Width="12" Height="12" Thickness="2.6"/></StackPanel>
+                      <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                          <MenuItem Header="收藏 / 取消收藏" Command="{Binding ToggleFavoriteCommand}"/>
+                          <MenuItem Header="复制连接" Command="{Binding DuplicateCommand}"/>
+                          <MenuItem Header="复制地址" Command="{Binding CopyAddressCommand}"/>
+                          <Separator/>
+                          <MenuItem Header="删除" Command="{Binding DeleteCommand}"/>
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <!-- Empty library: say what this page is for and offer the two ways to fill it. -->
+          <StackPanel IsVisible="{Binding ShowLibraryEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="460" Margin="0,0,0,60">
+            <Border Width="76" Height="76" CornerRadius="38" Background="{DynamicResource St.AccentSoft}" HorizontalAlignment="Center">
+              <c:StrokeIcon Data="{StaticResource Icon.Server}" Width="34" Height="34" Thickness="1.5" Brush="{DynamicResource St.Accent}"/>
+            </Border>
+            <TextBlock Text="{Binding EmptyTitle}" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource St.TextStrong}" Margin="0,4,0,0"/>
+            <TextBlock Classes="dim" TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" LineHeight="20"
+                       Text="保存常用主机后，可以在这里分组、搜索、收藏和批量连接。密码只保存在系统钥匙串 / 凭据管理器中。"/>
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,6,0,0">
+              <Button Classes="primary" Command="{Binding NewConnectionCommand}" AutomationProperties.Name="新建连接（空状态）">
+                <StackPanel Orientation="Horizontal" Spacing="6"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="12" Height="12" Thickness="2.4" Brush="{DynamicResource St.OnAccent}"/><TextBlock Text="{Binding NewConnectionLongLabel}" VerticalAlignment="Center"/></StackPanel>
+              </Button>
+              <Button Classes="secondary" Command="{Binding ImportCommand}" AutomationProperties.Name="导入连接（空状态）">
+                <StackPanel Orientation="Horizontal" Spacing="6"><c:StrokeIcon Data="{StaticResource Icon.Import}" Width="12" Height="12"/><TextBlock Text="导入连接" VerticalAlignment="Center"/></StackPanel>
+              </Button>
+            </StackPanel>
+            <Border Background="{DynamicResource St.Card}" CornerRadius="8" Padding="14,10" Margin="0,14,0,0">
+              <Grid ColumnDefinitions="Auto,*">
+                <c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="16" Height="16" VerticalAlignment="Top" Margin="0,1,10,0" Opacity="0.7"/>
+                <TextBlock Grid.Column="1" Classes="dim" TextWrapping="Wrap" FontSize="12" LineHeight="18"
+                           Text="堡垒机通过 xshell / xftp 唤醒本程序时会直接打开会话，不需要先在这里保存连接。"/>
+              </Grid>
+            </Border>
+          </StackPanel>
+
+          <!-- Connections exist, but the current group or search hides them. -->
+          <StackPanel IsVisible="{Binding ShowFilteredEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="0,0,0,60">
+            <c:StrokeIcon Data="{StaticResource Icon.Search}" Width="30" Height="30" Thickness="1.5" HorizontalAlignment="Center" Opacity="0.5"/>
+            <TextBlock Text="没有匹配的连接" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+            <Button Classes="secondary" Command="{Binding ClearFilterCommand}" Content="显示全部连接" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Panel>
+      </DockPanel>
+    </Grid>
+    </Panel>
+  </DockPanel>
+</UserControl>

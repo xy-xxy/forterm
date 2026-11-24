@@ -1,0 +1,330 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Forterm.Studio.ViewModels"
+             xmlns:sv="using:Forterm.Studio.Services"
+             xmlns:c="using:Forterm.Studio.Controls"
+             x:Class="Forterm.Studio.Views.MonitorView"
+             x:DataType="vm:MonitorViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource St.Card}"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="12,10,12,12"/>
+    </Style>
+    <Style Selector="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="TextBlock.h"><Setter Property="FontSize" Value="12.5"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource St.TextStrong}"/></Style>
+    <Style Selector="TextBlock.figure"><Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource St.TextStrong}"/></Style>
+    <Style Selector="TextBlock.num"><Setter Property="FontFeatures" Value="tnum"/><Setter Property="HorizontalAlignment" Value="Right"/></Style>
+    <Style Selector="TextBlock.strong"><Setter Property="Foreground" Value="{DynamicResource St.TextStrong}"/></Style>
+    <Style Selector="TextBlock.caption"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/></Style>
+    <Style Selector="c|TrendChart">
+      <Setter Property="Height" Value="68"/>
+      <Setter Property="Stroke" Value="{DynamicResource St.Data1}"/>
+      <Setter Property="SecondaryStroke" Value="{DynamicResource St.Data2}"/>
+      <Setter Property="Grid" Value="{DynamicResource St.Pressed}"/>
+      <Setter Property="Surface" Value="{DynamicResource St.Card}"/>
+      <Setter Property="Readout" Value="{DynamicResource St.Menu}"/>
+      <Setter Property="Ink" Value="{DynamicResource St.TextStrong}"/>
+      <Setter Property="Dim" Value="{DynamicResource St.TextDim}"/>
+      <Setter Property="Window" Value="{Binding TrendWindow}" x:DataType="vm:MonitorViewModel"/>
+      <Setter Property="Gap" Value="{Binding TrendGap}" x:DataType="vm:MonitorViewModel"/>
+    </Style>
+    <Style Selector=":is(UserControl).wide c|TrendChart"><Setter Property="Height" Value="120"/></Style>
+    <Style Selector="c|Meter">
+      <Setter Property="Fill" Value="{DynamicResource St.Data1}"/>
+      <Setter Property="Warning" Value="{DynamicResource St.Warning}"/>
+      <Setter Property="Danger" Value="{DynamicResource St.Danger}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Rectangle.key"><Setter Property="Width" Value="10"/><Setter Property="Height" Value="2"/><Setter Property="RadiusX" Value="1"/><Setter Property="RadiusY" Value="1"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+    <Style Selector="Button.row">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="4,2"/>
+      <Setter Property="Margin" Value="-4,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.row:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="Button.choice"><Setter Property="Background" Value="Transparent"/><Setter Property="Padding" Value="8,4"/><Setter Property="MinHeight" Value="0"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style>
+    <Style Selector="Button.choice:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="Button.seg"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/><Setter Property="Padding" Value="7,1"/><Setter Property="MinHeight" Value="0"/><Setter Property="MinWidth" Value="0"/><Setter Property="FontSize" Value="11"/><Setter Property="CornerRadius" Value="4"/></Style>
+    <Style Selector="Button.seg.on"><Setter Property="Background" Value="{DynamicResource St.Pressed}"/><Setter Property="Foreground" Value="{DynamicResource St.TextStrong}"/></Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- what is wrong, which host, how fresh -->
+    <c:RowsPanel DockPanel.Dock="Top" Margin="12,4,8,8" Spacing="5">
+      <Grid ColumnDefinitions="*,Auto">
+        <Panel VerticalAlignment="Center" MinHeight="22">
+          <TextBlock Text="{Binding Host}" Classes="dim" IsVisible="{Binding !HasData}"/>
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasData}">
+            <Panel Width="15" Height="15" VerticalAlignment="Center">
+              <c:StrokeIcon Data="{StaticResource Icon.Check}" Brush="{DynamicResource St.Accent}" Width="15" Height="15" Thickness="2.4" IsVisible="{Binding IsHealthy}"/>
+              <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Warning}" Width="15" Height="15" IsVisible="{Binding IsWarned}"/>
+              <c:StrokeIcon Data="{StaticResource Icon.Alarm}" Brush="{DynamicResource St.Danger}" Width="15" Height="15" IsVisible="{Binding IsSerious}"/>
+            </Panel>
+            <TextBlock Classes="h" Text="{Binding Headline}"/>
+          </StackPanel>
+        </Panel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Top">
+          <Button Classes="flat" Command="{Binding RefreshCommand}" ToolTip.Tip="立即刷新" AutomationProperties.Name="刷新监控">
+            <c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="13" Height="13"/>
+          </Button>
+          <Button Name="MenuButton" Classes="flat" Padding="5,4" ToolTip.Tip="刷新间隔、趋势范围" AutomationProperties.Name="监控选项">
+            <StackPanel Orientation="Horizontal" Spacing="3">
+              <TextBlock Text="{Binding RefreshText}" FontSize="11"/>
+              <c:StrokeIcon Data="{StaticResource Icon.ChevronDown}" Width="10" Height="10"/>
+            </StackPanel>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <StackPanel Width="170" Spacing="1">
+                  <TextBlock Text="自动刷新" Classes="caption" Margin="8,2"/>
+                  <ItemsControl ItemsSource="{Binding Intervals}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:MonitorChoice">
+                        <Button Classes="choice" Command="{Binding $parent[UserControl].((vm:MonitorViewModel)DataContext).IntervalCommand}" CommandParameter="{Binding}">
+                          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Title}"/><c:StrokeIcon Grid.Column="1" Data="{StaticResource Icon.Check}" Width="12" Height="12" IsVisible="{Binding IsSelected}"/></Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Separator Margin="0,3"/>
+                  <TextBlock Text="趋势范围" Classes="caption" Margin="8,2"/>
+                  <ItemsControl ItemsSource="{Binding Ranges}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:MonitorChoice">
+                        <Button Classes="choice" Command="{Binding $parent[UserControl].((vm:MonitorViewModel)DataContext).RangeCommand}" CommandParameter="{Binding}">
+                          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Title}"/><c:StrokeIcon Grid.Column="1" Data="{StaticResource Icon.Check}" Width="12" Height="12" IsVisible="{Binding IsSelected}"/></Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Separator Margin="0,3"/>
+                  <Button Classes="choice" Command="{Binding CopyCommand}"><TextBlock Text="复制趋势数据（CSV）"/></Button>
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+      <ScrollViewer MaxHeight="170" IsVisible="{Binding !IsHealthy}" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding ShownFindings}" Margin="4,0,12,0" AutomationProperties.Name="需要注意">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><c:ColumnsPanel MinColumnWidth="300" MaxColumns="3" Spacing="2" ColumnSpacing="20"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="sv:MonitorFinding">
+              <Button Classes="row" Tag="{Binding Section}" Click="OnVitalClick" AutomationProperties.Name="{Binding Said}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                  <Ellipse Width="6" Height="6" Margin="0,5,0,0" VerticalAlignment="Top" Fill="{DynamicResource St.Warning}" IsVisible="{Binding !IsDanger}"/>
+                  <Rectangle Width="6" Height="6" Margin="0,5,0,0" VerticalAlignment="Top" Fill="{DynamicResource St.Danger}" IsVisible="{Binding IsDanger}"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"/>
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Button Classes="row" Command="{Binding ToggleFindingsCommand}" IsVisible="{Binding HasMoreFindings}"><TextBlock Classes="caption" Text="{Binding MoreFindingsText}"/></Button>
+      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasData}">
+        <TextBlock Classes="caption" Text="{Binding SystemLine}" ToolTip.Tip="{Binding SystemLine}"/>
+        <TextBlock Grid.Column="1" Classes="caption num" Text="{Binding UpdatedText}" Margin="8,0,4,0"/>
+      </Grid>
+    </c:RowsPanel>
+    <Border DockPanel.Dock="Top" IsVisible="{Binding HasMessage}" Background="{DynamicResource St.Notice}" CornerRadius="6" Padding="10,6" Margin="8,0,8,8">
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap"/>
+    </Border>
+
+    <Panel>
+      <StackPanel IsVisible="{Binding !HasData}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="12,40,12,0" Spacing="10">
+        <c:StrokeIcon Data="{StaticResource Icon.Activity}" Width="28" Height="28" Opacity="0.5" HorizontalAlignment="Center"/>
+        <TextBlock Text="读取系统、CPU、内存、网络、磁盘与进程信息。使用独立的只读通道，不会在终端里输入命令。" TextWrapping="Wrap" TextAlignment="Center" Classes="dim" FontSize="12" MaxWidth="230"/>
+        <Button Classes="secondary" Content="读取监控数据" Command="{Binding RefreshCommand}" HorizontalAlignment="Center"/>
+      </StackPanel>
+
+      <DockPanel IsVisible="{Binding HasData}" Opacity="{Binding ContentOpacity}">
+        <!-- overview: always in sight -->
+        <Border DockPanel.Dock="Top" Classes="card" Margin="8,0,8,8" Padding="12,8">
+          <ItemsControl ItemsSource="{Binding Vitals}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><c:ColumnsPanel MinColumnWidth="200" MaxColumns="4" Even="True" Spacing="2" ColumnSpacing="28"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:VitalItem">
+                <Button Classes="row" Tag="{Binding Section}" Click="OnVitalClick" ToolTip.Tip="{Binding Note}" AutomationProperties.Name="{Binding Name}">
+                  <Grid ColumnDefinitions="76,*,Auto,42" ColumnSpacing="6" Height="18">
+                    <TextBlock Text="{Binding Name}"/>
+                    <c:Meter Grid.Column="1" Value="{Binding Percent}" Secondary="{Binding Secondary}" Level="{Binding Level}"/>
+                    <Panel Grid.Column="2">
+                      <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Warning}" Width="12" Height="12" IsVisible="{Binding IsWarning}"/>
+                      <c:StrokeIcon Data="{StaticResource Icon.Alarm}" Brush="{DynamicResource St.Danger}" Width="12" Height="12" IsVisible="{Binding IsDanger}"/>
+                    </Panel>
+                    <TextBlock Grid.Column="3" Classes="num strong" Text="{Binding Figure}"/>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+
+        <!-- the padding is inside: a ScrollViewer's own is left out when it measures, and text gets cut off -->
+        <ScrollViewer Name="Scroll">
+          <c:ColumnsPanel Margin="8,0,8,8" MinColumnWidth="330" MaxColumns="3" Spacing="8">
+
+            <!-- CPU -->
+            <Border Name="Card_cpu" Classes="card">
+              <c:RowsPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Classes="h" Text="CPU"/>
+                  <TextBlock Grid.Column="1" Classes="caption" Text="{Binding RangeText}" Margin="8,0,0,0"/>
+                  <TextBlock Grid.Column="2" Classes="figure" Text="{Binding CpuText}"/>
+                </Grid>
+                <c:TrendChart Values="{Binding CpuTrend}" Label="CPU" HoverTime="{Binding HoverTime, Mode=TwoWay}" AutomationProperties.Name="CPU 使用率趋势"/>
+                <Grid ColumnDefinitions="*,*,*,*">
+                  <c:RowsPanel><TextBlock Classes="caption" Text="用户"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding UserText}"/></c:RowsPanel>
+                  <c:RowsPanel Grid.Column="1"><TextBlock Classes="caption" Text="系统"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding KernelText}"/></c:RowsPanel>
+                  <c:RowsPanel Grid.Column="2" ToolTip.Tip="空闲但有磁盘请求没完成的时间（iowait）"><TextBlock Classes="caption" Text="等待磁盘"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding WaitText}"/></c:RowsPanel>
+                  <c:RowsPanel Grid.Column="3" ToolTip.Tip="虚拟机想用、但被宿主机拿走的时间（steal）"><TextBlock Classes="caption" Text="被抢占"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding StealText}"/></c:RowsPanel>
+                </Grid>
+                <c:RowsPanel Spacing="4">
+                  <c:CoreBars Cores="{Binding Cores}" Hovered="{Binding HoveredCore, Mode=OneWayToSource}" Fill="{DynamicResource St.Data1}" Ink="{DynamicResource St.TextStrong}" AutomationProperties.Name="每个核的使用率"/>
+                  <TextBlock Classes="caption" Text="{Binding CoreCaption}"/>
+                </c:RowsPanel>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBlock Classes="caption" Text="负载 1 / 5 / 15 分钟"/>
+                  <TextBlock Grid.Column="1" Classes="num strong" Text="{Binding LoadText}"/>
+                </Grid>
+              </c:RowsPanel>
+            </Border>
+
+            <!-- memory -->
+            <Border Name="Card_memory" Classes="card">
+              <c:RowsPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <TextBlock Classes="h" Text="内存"/>
+                  <TextBlock Grid.Column="1" Classes="caption" Text="{Binding MemoryTotal, StringFormat='共 {0}'}" Margin="8,0,0,0"/>
+                  <TextBlock Grid.Column="2" Classes="figure" Text="{Binding MemoryText}"/>
+                </Grid>
+                <c:TrendChart Values="{Binding MemoryTrend}" Label="内存" HoverTime="{Binding HoverTime, Mode=TwoWay}" AutomationProperties.Name="内存使用率趋势"/>
+                <Grid ColumnDefinitions="*,*,*">
+                  <c:RowsPanel><TextBlock Classes="caption" Text="已用"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding MemoryUsed}"/></c:RowsPanel>
+                  <c:RowsPanel Grid.Column="1"><TextBlock Classes="caption" Text="缓存"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding MemoryCache}"/></c:RowsPanel>
+                  <c:RowsPanel Grid.Column="2" ToolTip.Tip="程序还能拿到的内存：空闲加上可以回收的缓存"><TextBlock Classes="caption" Text="可用"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding MemoryAvailable}"/></c:RowsPanel>
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBlock Classes="caption" Text="交换区"/>
+                  <TextBlock Grid.Column="1" Classes="num strong" Text="{Binding SwapText}"/>
+                </Grid>
+              </c:RowsPanel>
+            </Border>
+
+            <!-- network -->
+            <Border Name="Card_network" Classes="card">
+              <c:RowsPanel Spacing="8">
+                <c:RowsPanel Spacing="4">
+                  <TextBlock Classes="h" Text="网络"/>
+                  <WrapPanel ItemSpacing="14" LineSpacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="5"><Rectangle Classes="key" Fill="{DynamicResource St.Data1}"/><TextBlock Classes="caption" Text="下载"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding DownloadSpeed}"/></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="5"><Rectangle Classes="key" Fill="{DynamicResource St.Data2}"/><TextBlock Classes="caption" Text="上传"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding UploadSpeed}"/></StackPanel>
+                  </WrapPanel>
+                </c:RowsPanel>
+                <c:TrendChart Unit="BytesPerSecond" Values="{Binding ReceiveTrend}" Secondary="{Binding SendTrend}" Label="下载" SecondaryLabel="上传" HoverTime="{Binding HoverTime, Mode=TwoWay}" AutomationProperties.Name="网络速率趋势"/>
+                <ItemsControl ItemsSource="{Binding Interfaces}" IsVisible="{Binding HasInterfaces}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><c:RowsPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:InterfaceItem">
+                      <Grid ColumnDefinitions="2*,3*,3*" Height="18">
+                        <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Name}"/>
+                        <TextBlock Grid.Column="1" Classes="num" Text="{Binding Down, StringFormat='↓ {0}'}"/>
+                        <TextBlock Grid.Column="2" Classes="num" Text="{Binding Up, StringFormat='↑ {0}'}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBlock Classes="caption" Text="打开监控以来"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                    <TextBlock FontFeatures="tnum" Text="{Binding DownloadTotal, StringFormat='↓ {0}'}"/>
+                    <TextBlock FontFeatures="tnum" Text="{Binding UploadTotal, StringFormat='↑ {0}'}"/>
+                  </StackPanel>
+                </Grid>
+              </c:RowsPanel>
+            </Border>
+
+            <!-- disks -->
+            <Border Name="Card_disk" Classes="card">
+              <c:RowsPanel Spacing="8">
+                <c:RowsPanel Spacing="4">
+                  <TextBlock Classes="h" Text="磁盘"/>
+                  <WrapPanel ItemSpacing="14" LineSpacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="5"><Rectangle Classes="key" Fill="{DynamicResource St.Data1}"/><TextBlock Classes="caption" Text="读"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding ReadSpeed}"/></StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="5"><Rectangle Classes="key" Fill="{DynamicResource St.Data2}"/><TextBlock Classes="caption" Text="写"/><TextBlock Classes="strong" FontFeatures="tnum" Text="{Binding WriteSpeed}"/></StackPanel>
+                  </WrapPanel>
+                </c:RowsPanel>
+                <c:TrendChart Unit="BytesPerSecond" Values="{Binding ReadTrend}" Secondary="{Binding WriteTrend}" Label="读" SecondaryLabel="写" HoverTime="{Binding HoverTime, Mode=TwoWay}" AutomationProperties.Name="磁盘读写趋势"/>
+                <ItemsControl ItemsSource="{Binding Mounts}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><c:RowsPanel Spacing="9"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:MountItem">
+                      <c:RowsPanel Spacing="4" Background="Transparent" ToolTip.Tip="{Binding Detail}">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
+                          <TextBlock Classes="strong" Text="{Binding Mount}"/>
+                          <Panel Grid.Column="1">
+                            <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Warning}" Width="12" Height="12" IsVisible="{Binding IsWarning}"/>
+                            <c:StrokeIcon Data="{StaticResource Icon.Alarm}" Brush="{DynamicResource St.Danger}" Width="12" Height="12" IsVisible="{Binding IsDanger}"/>
+                          </Panel>
+                          <TextBlock Grid.Column="2" Classes="num strong" Text="{Binding UsedText}"/>
+                        </Grid>
+                        <c:Meter Value="{Binding Percent}" Level="{Binding Level}"/>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <TextBlock Classes="caption" Text="{Binding Space}"/>
+                          <TextBlock Grid.Column="1" Classes="caption num" Text="{Binding Rates}"/>
+                        </Grid>
+                      </c:RowsPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </c:RowsPanel>
+            </Border>
+
+            <!-- processes -->
+            <Border Name="Card_processes" Classes="card">
+              <c:RowsPanel Spacing="6">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                  <TextBlock Classes="h" Text="进程"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1">
+                    <Button Classes="seg" Classes.on="{Binding SortByCpu}" Content="CPU" Command="{Binding SortByCpuCommand}" AutomationProperties.Name="按 CPU 排序"/>
+                    <Button Classes="seg" Classes.on="{Binding SortByMemory}" Content="内存" Command="{Binding SortByMemoryCommand}" AutomationProperties.Name="按内存排序"/>
+                  </StackPanel>
+                  <Button Grid.Column="2" Classes="flat" Command="{Binding ShowProcessesCommand}" Padding="4,1" Margin="0,0,-4,0" AutomationProperties.Name="查看全部进程">
+                    <StackPanel Orientation="Horizontal" Spacing="2"><TextBlock Text="全部" FontSize="11"/><c:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="10" Height="10"/></StackPanel>
+                  </Button>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding TopProcesses}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><c:RowsPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:ProcessItem">
+                      <Button Classes="row" Command="{Binding $parent[UserControl].((vm:MonitorViewModel)DataContext).ShowProcessCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Name}">
+                        <c:RowsPanel Spacing="3">
+                          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <TextBlock Classes="strong" Text="{Binding Name}" MaxWidth="150"/>
+                            <TextBlock Grid.Column="1" Classes="caption" Text="{Binding Arguments}"/>
+                            <TextBlock Grid.Column="2" Classes="num strong" Text="{Binding Value}"/>
+                          </Grid>
+                          <c:Meter Value="{Binding Share}" Height="3"/>
+                        </c:RowsPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="没有占用明显的进程" Classes="caption" IsVisible="{Binding !HasProcesses}"/>
+              </c:RowsPanel>
+            </Border>
+          </c:ColumnsPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Panel>
+  </DockPanel>
+</UserControl>

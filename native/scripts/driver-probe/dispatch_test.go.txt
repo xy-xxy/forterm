@@ -1,0 +1,41 @@
+package glfw
+
+import (
+ "testing"
+ "time"
+ "bytes"
+ "strings"
+ "runtime"
+ "forterm/native/testbridge"
+ "fyne.io/fyne/v2"
+ "fyne.io/fyne/v2/container"
+ "fyne.io/fyne/v2/driver/desktop"
+ "fyne.io/fyne/v2/test"
+ "fyne.io/fyne/v2/widget"
+)
+func TestFortermActualTabDispatcher(t *testing.T){
+ app:=test.NewApp();defer app.Quit()
+ first,second:=testbridge.NewTerminal(),testbridge.NewTerminal();defer first.Close();defer second.Close()
+ entry,other:=widget.NewEntry(),widget.NewEntry();editor:=testbridge.NewEditor();defer editor.Close()
+ c:=newCanvas();c.setContent(container.NewVBox(first.Terminal,second.Terminal,entry,other,editor));w:=&window{canvas:c}
+ dispatch:=func(key fyne.KeyName,mod fyne.KeyModifier){w.processKeyPressed(key,key,0,press,mod);w.processKeyPressed(key,key,0,release,mod)}
+ take:=func(ch chan []byte,want []byte){select{case got:=<-ch:if !bytes.Equal(got,want){t.Fatalf("bytes %x, want %x",got,want)};case <-time.After(time.Second):t.Fatal("no terminal byte from native dispatcher")}}
+ c.Focus(first.Terminal);dispatch(fyne.KeyTab,0);take(first.Bytes,[]byte{9});if c.Focused()!=first.Terminal{t.Fatal("Tab escaped first terminal")}
+ w.processKeyPressed(desktop.KeyShiftLeft,desktop.KeyShiftLeft,0,press,fyne.KeyModifierShift);dispatch(fyne.KeyTab,fyne.KeyModifierShift);w.processKeyPressed(desktop.KeyShiftLeft,desktop.KeyShiftLeft,0,release,0);take(first.Bytes,[]byte("\x1b[Z"))
+ c.Focus(second.Terminal);dispatch(fyne.KeyTab,0);take(second.Bytes,[]byte{9});select{case <-first.Bytes:t.Fatal("split focus leaked input");default:}
+ c.Focus(entry);dispatch(fyne.KeyTab,0);if c.Focused()!=other{t.Fatal("single-line form lost normal Tab traversal")};select{case <-second.Bytes:t.Fatal("form sent Tab to terminal");default:}
+ c.Focus(editor);dispatch(fyne.KeyTab,0);if c.Focused()!=editor||editor.Document.Serialize()==""{t.Fatal("editable code did not retain indentation Tab")}
+ second.Close();c.Focus(second.Terminal);dispatch(fyne.KeyTab,0);select{case <-second.Bytes:t.Fatal("closed terminal leaked input");default:}
+}
+
+func TestFortermDispatcherReachesSyntheticPTYAndSSH(t *testing.T){
+ if runtime.GOOS=="windows"{t.Skip("Unix PTY fixture")}
+ app:=test.NewApp();defer app.Quit();local,e:=testbridge.NewPTY();if e!=nil{t.Fatal(e)};defer local.Close()
+ c:=newCanvas();c.setContent(container.NewVBox(local.Terminal,widget.NewEntry()));w:=&window{canvas:c};c.Focus(local.Terminal)
+ w.processKeyPressed(fyne.KeyTab,fyne.KeyTab,0,press,0);w.processKeyPressed(fyne.KeyTab,fyne.KeyTab,0,release,0)
+ until:=time.Now().Add(2*time.Second);for !strings.Contains(local.Output(),"09"){if time.Now().After(until){t.Fatal("actual synthetic shell did not receive Tab byte")};time.Sleep(time.Millisecond)}
+ remote,input,auth,e:=testbridge.NewSSH();if e!=nil{t.Fatal(e)};defer remote.Close();c.setContent(container.NewVBox(remote.Terminal,widget.NewEntry()));c.Focus(remote.Terminal)
+ w.processKeyPressed(fyne.KeyTab,fyne.KeyTab,0,press,0);w.processKeyPressed(fyne.KeyTab,fyne.KeyTab,0,release,0)
+ until=time.Now().Add(time.Second);for !bytes.Contains(input(),[]byte{9}){if time.Now().After(until){t.Fatal("SSH PTY did not receive dispatcher Tab")};time.Sleep(time.Millisecond)}
+ if c.Focused()!=remote.Terminal||auth()!=1{t.Fatal("SSH focus/authentication changed")}
+}

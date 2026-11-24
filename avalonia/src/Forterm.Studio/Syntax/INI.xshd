@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="INI" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>^\s*[\#;]</Begin></Span>
+    <Rule color="Heading">^\s{0,200}\[[^\]]{0,400}\]</Rule>
+    <Rule color="Key">^\s{0,200}(export\s{1,20})?[\w.*/@-]{1,200}(\[[^\]]{0,100}\])?(?=\s{0,100}[=:])</Rule>
+    <Rule color="Key">^\s{0,200}[A-Za-z][\w.-]{0,100}(?=\s{1,100}[^\s=:])</Rule>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/><Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]</Rule></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Variable">\$\{[^}]{0,200}\}|\$\([\w\ ./-]{0,200}\)|\$[A-Za-z_]\w*|\$[0-9@\#?!*$-]|%[a-zA-Z](?=\b)|%\([^)]{0,100}\)s</Rule>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word><Word>yes</Word><Word>no</Word><Word>on</Word><Word>off</Word><Word>none</Word><Word>null</Word><Word>True</Word><Word>False</Word><Word>Yes</Word><Word>No</Word><Word>On</Word><Word>Off</Word><Word>None</Word></Keywords>
+    <Rule color="Function">\b[a-z][a-z0-9+.-]{1,10}://[^\s&quot;\&#x27;&lt;&gt;)]+</Rule>
+    <Rule color="Constant">\b(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5}|/\d{1,2})?\b</Rule>
+    <Rule color="Number">\b\d+(\.\d+)?(%|[kKmMgGtT]i?[bB]?|ms|s|m|h|d|w)?\b</Rule>
+    <Rule color="String">(?&lt;=[=\s])/[\w./@%+-]+</Rule>
+  </RuleSet>
+</SyntaxDefinition>

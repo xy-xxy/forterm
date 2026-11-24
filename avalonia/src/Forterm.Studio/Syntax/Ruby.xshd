@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forterm: colours are roles; Services/EditorSyntax.cs gives them the colours of the terminal scheme. -->
+<SyntaxDefinition name="Ruby" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment"/>
+  <Color name="Keyword"/>
+  <Color name="String"/>
+  <Color name="Number"/>
+  <Color name="Key"/>
+  <Color name="Function"/>
+  <Color name="Type"/>
+  <Color name="Constant"/>
+  <Color name="Variable"/>
+  <Color name="Operator"/>
+  <Color name="Heading"/>
+  <Color name="Good"/>
+  <Color name="Warning"/>
+  <Color name="Bad"/>
+  <RuleSet>
+    <Span color="Comment"><Begin>(?&lt;=^|\s)\#</Begin></Span>
+    <Span color="String"><Begin>&quot;</Begin><End>&quot;</End><RuleSet><Span begin="\\" end="."/><Rule color="Variable">\#\{[^}]{0,200}\}</Rule></RuleSet></Span>
+    <Span color="String"><Begin>&#x27;</Begin><End>&#x27;</End></Span>
+    <Rule color="Constant">(?&lt;![\w:]):[A-Za-z_]\w*[?!]?</Rule>
+    <Rule color="Variable">@{1,2}\w+|\$\w+</Rule>
+    <Keywords color="Keyword"><Word>alias</Word><Word>and</Word><Word>begin</Word><Word>break</Word><Word>case</Word><Word>class</Word><Word>def</Word><Word>defined?</Word><Word>do</Word><Word>else</Word><Word>elsif</Word><Word>end</Word><Word>ensure</Word><Word>for</Word><Word>if</Word><Word>in</Word><Word>module</Word><Word>next</Word><Word>not</Word><Word>or</Word><Word>redo</Word><Word>rescue</Word><Word>retry</Word><Word>return</Word><Word>self</Word><Word>super</Word><Word>then</Word><Word>undef</Word><Word>unless</Word><Word>until</Word><Word>when</Word><Word>while</Word><Word>yield</Word><Word>require</Word><Word>require_relative</Word><Word>include</Word><Word>extend</Word><Word>attr_accessor</Word><Word>attr_reader</Word><Word>attr_writer</Word></Keywords>
+    <Keywords color="Constant"><Word>true</Word><Word>false</Word><Word>nil</Word></Keywords>
+    <Rule color="Type">\b[A-Z]\w*</Rule>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

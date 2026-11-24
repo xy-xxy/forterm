@@ -1,0 +1,623 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Forterm.Studio.ViewModels"
+        xmlns:c="using:Forterm.Studio.Controls"
+        xmlns:sv="using:Forterm.Studio.Services"
+        xmlns:lib="using:Forterm.Studio.Library"
+        x:Class="Forterm.Studio.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="系统配置" Width="860" Height="600" MinWidth="680" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource St.Dialog}">
+  <Window.Styles>
+    <Style Selector="Button.nav">
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.Text}"/>
+      <Setter Property="Padding" Value="12,8"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button.nav.active /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Accent}"/><Setter Property="Foreground" Value="{DynamicResource St.OnAccent}"/></Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource St.DialogSection}"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Padding" Value="14,12"/>
+      <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+    <Style Selector="TextBlock.h"><Setter Property="FontSize" Value="13"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="TextBlock.hint"><Setter Property="FontSize" Value="11.5"/><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style Selector="Button.swatch">
+      <Setter Property="Width" Value="62"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="BorderThickness" Value="2"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource St.Line}"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Button.swatch.selected"><Setter Property="BorderBrush" Value="{DynamicResource St.Accent}"/></Style>
+    <Style Selector="Button.dot">
+      <Setter Property="Width" Value="26"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Margin" Value="0,0,10,0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="BorderThickness" Value="3"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.dot.selected"><Setter Property="BorderBrush" Value="{DynamicResource St.TextStrong}"/></Style>
+    <Style Selector="Button.key"><Setter Property="Background" Value="{DynamicResource St.Pressed}"/><Setter Property="Padding" Value="10,2"/><Setter Property="MinHeight" Value="0"/><Setter Property="MinWidth" Value="92"/><Setter Property="FontSize" Value="12"/><Setter Property="CornerRadius" Value="4"/><Setter Property="HorizontalContentAlignment" Value="Center"/></Style>
+    <Style Selector="Button.key:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="Button.key.capturing /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+    <Style Selector="TextBlock.bad"><Setter Property="Foreground" Value="{DynamicResource St.Danger}"/></Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.Accent}"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Padding" Value="2,0"/>
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/><Setter Property="Foreground" Value="{DynamicResource St.Accent}"/></Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="190,*" Margin="14">
+    <DockPanel Margin="0,0,14,0">
+      <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+        <TextBox Text="{Binding SearchText}" PlaceholderText="搜索设置" Padding="10,6,26,6" AutomationProperties.Name="搜索设置"/>
+        <Button Classes="pane-icon" HorizontalAlignment="Right" Margin="0,0,4,0" IsVisible="{Binding IsSearching}" Command="{Binding ClearSearchCommand}" ToolTip.Tip="清除" AutomationProperties.Name="清除搜索">
+          <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+        </Button>
+      </Grid>
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="4">
+        <Button Classes="nav" Classes.active="{Binding IsTheme}" IsVisible="{Binding ShowThemeSection}" Command="{Binding ShowSectionCommand}" CommandParameter="theme" Content="主题界面"/>
+        <Button Classes="nav" Classes.active="{Binding IsTerminal}" IsVisible="{Binding ShowTerminalSection}" Command="{Binding ShowSectionCommand}" CommandParameter="terminal" Content="通用终端"/>
+        <Button Classes="nav" Classes.active="{Binding IsHighlight}" IsVisible="{Binding ShowHighlightSection}" Command="{Binding ShowSectionCommand}" CommandParameter="highlight" Content="自定义高亮"/>
+        <Button Classes="nav" Classes.active="{Binding IsQuick}" IsVisible="{Binding ShowQuickSection}" Command="{Binding ShowSectionCommand}" CommandParameter="quick" Content="快速命令"/>
+        <Button Classes="nav" Classes.active="{Binding IsEditor}" IsVisible="{Binding ShowEditorSection}" Command="{Binding ShowSectionCommand}" CommandParameter="editor" Content="编辑器"/>
+        <Button Classes="nav" Classes.active="{Binding IsFiles}" IsVisible="{Binding ShowFilesSection}" Command="{Binding ShowSectionCommand}" CommandParameter="files" Content="文件与传输"/>
+        <Button Classes="nav" Classes.active="{Binding IsLayout}" IsVisible="{Binding ShowLayoutSection}" Command="{Binding ShowSectionCommand}" CommandParameter="layout" Content="布局"/>
+        <Button Classes="nav" Classes.active="{Binding IsMonitor}" IsVisible="{Binding ShowMonitorSection}" Command="{Binding ShowSectionCommand}" CommandParameter="monitor" Content="监控阈值"/>
+        <Button Classes="nav" Classes.active="{Binding IsKeys}" IsVisible="{Binding ShowKeysSection}" Command="{Binding ShowSectionCommand}" CommandParameter="keys" Content="快捷键"/>
+        <Button Classes="nav" Classes.active="{Binding IsLocal}" IsVisible="{Binding ShowLocalSection}" Command="{Binding ShowSectionCommand}" CommandParameter="local" Content="本地终端"/>
+        <Button Classes="nav" Classes.active="{Binding IsBackup}" IsVisible="{Binding ShowBackupSection}" Command="{Binding ShowSectionCommand}" CommandParameter="backup" Content="备份恢复"/>
+        <Button Classes="nav" Classes.active="{Binding IsAbout}" IsVisible="{Binding ShowAboutSection}" Command="{Binding ShowSectionCommand}" CommandParameter="about" Content="关于与验证说明"/>
+        <TextBlock Classes="hint" Text="没有匹配的设置" IsVisible="{Binding NoMatches}" Margin="12,8"/>
+      </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+
+    <ScrollViewer Grid.Column="1">
+      <StackPanel IsVisible="{Binding !NoMatches}">
+        <Border IsVisible="{Binding HasSaveError}" Background="{DynamicResource St.Notice}" CornerRadius="5" Padding="10,7" Margin="0,0,0,10">
+          <TextBlock Text="{Binding SaveError}" FontSize="12" TextWrapping="Wrap"/>
+        </Border>
+        <!-- 主题界面 -->
+        <StackPanel IsVisible="{Binding IsTheme}">
+          <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8" IsVisible="{Binding ShowPresets}">
+            <TextBlock Classes="h" Text="背景（预设，包含背景色和导航栏颜色）" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Classes="secondary" Content="恢复默认外观" Command="{Binding ResetCommand}"/>
+          </Grid>
+          <Border Classes="card" IsVisible="{Binding ShowPresets}">
+            <ItemsControl ItemsSource="{Binding Presets}">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:PresetItem">
+                  <Button Classes="swatch" Classes.selected="{Binding IsSelected}" Background="{Binding Preset.Swatch}" Foreground="{Binding Preset.SwatchText}"
+                          Content="{Binding Name}" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).SelectThemeCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowNavColor}">
+            <StackPanel Spacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="h" Text="导航栏颜色" VerticalAlignment="Center"/>
+                <Button Classes="link" Content="恢复默认" FontSize="11.5" Command="{Binding SelectNavColorCommand}" IsVisible="{Binding !NavColorIsDefault}" AutomationProperties.Name="导航栏颜色恢复默认"/>
+              </StackPanel>
+              <TextBlock Classes="hint" Text="仅影响顶部导航栏配色；默认跟随背景预设。"/>
+              <ItemsControl ItemsSource="{Binding NavColors}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:AccentItem">
+                    <Button Classes="dot" Classes.selected="{Binding IsSelected}" Background="{Binding Brush}" ToolTip.Tip="{Binding Color}" Margin="0,0,10,4"
+                            Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).SelectNavColorCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Color}"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowAccent}">
+            <StackPanel Spacing="10">
+              <TextBlock Classes="h" Text="主题色"/>
+              <TextBlock Classes="hint" Text="软件主题色，主要用于操作按钮、选中项和强调文字。"/>
+              <ItemsControl ItemsSource="{Binding Accents}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:AccentItem">
+                    <Button Classes="dot" Classes.selected="{Binding IsSelected}" Background="{Binding Brush}" ToolTip.Tip="{Binding Color}"
+                            Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).SelectAccentCommand}" CommandParameter="{Binding}"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowFollow}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3"><TextBlock Classes="h" Text="跟随系统主题"/><TextBlock Classes="hint" Text="跟随系统自动切换明亮 / 暗夜。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding FollowSystem}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="跟随系统主题"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowUiFont}">
+            <Grid ColumnDefinitions="*,240">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="系统字体"/><TextBlock Classes="hint" Text="除终端外，软件内的字体。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding UiFonts}" SelectedItem="{Binding UiFont}" HorizontalAlignment="Stretch" VerticalAlignment="Center" MaxDropDownHeight="320" AutomationProperties.Name="系统字体"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowScale}">
+            <Grid ColumnDefinitions="Auto,*,60">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="界面缩放"/><TextBlock Classes="hint" Text="调整界面大小。"/></StackPanel>
+              <Slider Grid.Column="1" Minimum="50" Maximum="150" TickFrequency="10" IsSnapToTickEnabled="True" Value="{Binding UiScalePercent}" VerticalAlignment="Center" AutomationProperties.Name="界面缩放"/>
+              <TextBlock Grid.Column="2" Text="{Binding UiScaleText}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowMotion}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="界面动画"/><TextBlock Classes="hint" Text="切换、弹出、提示等过渡效果。关闭后界面立即变化，功能不受影响。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding UseMotion}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="界面动画"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 编辑器 -->
+        <StackPanel IsVisible="{Binding IsEditor}">
+          <Border Classes="card" IsVisible="{Binding Shown[edfont]}">
+            <Grid ColumnDefinitions="*,240" RowDefinitions="Auto,Auto" RowSpacing="10">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="编辑器字体"/><TextBlock Classes="hint" Text="颜色取自终端配色。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding EditorFonts}" SelectedItem="{Binding EditorFont}" HorizontalAlignment="Stretch" VerticalAlignment="Center" MaxDropDownHeight="320" AutomationProperties.Name="编辑器字体"/>
+              <StackPanel Grid.Row="1" Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="编辑器字号"/><TextBlock Classes="hint" Text="也可以在编辑器里按住 Cmd / Ctrl 滚动滚轮。"/></StackPanel>
+              <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,34"><Slider Minimum="9" Maximum="28" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding EditorFontSize}" VerticalAlignment="Center" AutomationProperties.Name="编辑器字号"/><TextBlock Grid.Column="1" Text="{Binding EditorFontSize}" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[edwrap]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="自动换行"/><TextBlock Classes="hint" Text="超出窗口宽度的行折到下一行显示，不改变文件内容。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding EditorWrap}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="自动换行"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[edindent]}">
+            <Grid ColumnDefinitions="*,120" RowDefinitions="Auto,Auto" RowSpacing="10">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="缩进宽度"/><TextBlock Classes="hint" Text="制表符显示为几列；按 Tab 插入空格时插入几个。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding EditorTabs}" SelectedItem="{Binding EditorTab}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="缩进宽度"/>
+              <StackPanel Grid.Row="1" Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="按 Tab 插入空格"/><TextBlock Classes="hint" Text="不启用时插入制表符。Makefile 等必须用制表符的文件请不要启用。"/></StackPanel>
+              <ToggleSwitch Grid.Row="1" Grid.Column="1" IsChecked="{Binding EditorSpaces}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="按 Tab 插入空格"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[edshow]}">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6">
+              <TextBlock Classes="h" Text="显示行号" VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding EditorLineNumbers}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="显示行号"/>
+              <TextBlock Grid.Row="1" Classes="h" Text="显示空格和制表符" VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Row="1" Grid.Column="1" IsChecked="{Binding EditorWhitespace}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="显示空格和制表符"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[edcolour]}">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="关键字颜色"/><TextBlock Classes="hint" Text="按文件名和内容识别语言，只影响显示。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding EditorColours}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="编辑器关键字颜色"/>
+              <TextBlock Grid.Row="1" Classes="hint" Text="{Binding LanguagesText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+              <Button Grid.Row="1" Grid.Column="1" Classes="link" Content="全部忘掉" Command="{Binding ForgetLanguagesCommand}" IsVisible="{Binding HasLanguages}"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 文件与传输 -->
+        <StackPanel IsVisible="{Binding IsFiles}">
+          <Border Classes="card" IsVisible="{Binding Shown[fsort]}">
+            <Grid ColumnDefinitions="*,160" RowDefinitions="Auto,Auto" RowSpacing="8">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="排序方式"/><TextBlock Classes="hint" Text="目录总在前面。文件栏工具条的排序按钮是同一设置。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding FileSorts}" SelectedItem="{Binding FileSort}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="排序方式"/>
+              <TextBlock Grid.Row="1" Classes="h" Text="从大到小、从新到旧" VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Row="1" Grid.Column="1" IsChecked="{Binding FileSortDescending}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="从大到小、从新到旧"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[fhidden]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="显示隐藏文件"/><TextBlock Classes="hint" Text="名称以点开头的文件和目录。只影响显示：下载、删除、压缩文件夹时都包含它们。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding ShowHiddenFiles}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="显示隐藏文件"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[fdetails]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="显示大小和修改时间"/><TextBlock Classes="hint" Text="文件栏够宽时显示在名称右侧；鼠标停在文件上也能看到。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding FileDetails}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="显示大小和修改时间"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[fdownload]}">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <StackPanel Spacing="3" Margin="0,0,8,0"><TextBlock Classes="h" Text="默认下载目录"/><TextBlock Classes="hint" Text="右键菜单里不询问位置的那一项下载到这里；文件同名时自动编号，文件夹同名时不下载，都不覆盖。"/><TextBlock Text="{Binding DownloadFolderText}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DownloadFolderText}"/></StackPanel>
+              <Button Grid.Column="1" Classes="secondary" Content="选择…" Command="{Binding ChooseDownloadFolderCommand}" VerticalAlignment="Center" IsEnabled="{Binding CanBackup}"/>
+              <Button Grid.Column="2" Classes="link" Content="改回桌面" Command="{Binding DesktopDownloadCommand}" IsVisible="{Binding HasDownloadFolder}" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[fnotify]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="传输完成时提示"/><TextBlock Classes="hint" Text="在窗口右下角提示。失败总会提示，不受这里影响。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding NotifyTransfers}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="传输完成时提示"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 布局 -->
+        <StackPanel IsVisible="{Binding IsLayout}">
+          <Border Classes="card" IsVisible="{Binding Shown[columns]}">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+              <StackPanel Grid.ColumnSpan="2" Spacing="3"><TextBlock Classes="h" Text="新会话显示的栏"/><TextBlock Classes="hint" Text="对之后打开的 SSH 会话生效；随时可以用左侧图标显示或收起。监控栏不显示时不读取监控数据。"/></StackPanel>
+              <TextBlock Grid.Row="1" Text="文件栏" VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Row="1" Grid.Column="1" IsChecked="{Binding OpenFiles}" OnContent="显示" OffContent="不显示" AutomationProperties.Name="新会话显示文件栏"/>
+              <TextBlock Grid.Row="2" Text="监控栏" VerticalAlignment="Center"/>
+              <ToggleSwitch Grid.Row="2" Grid.Column="1" IsChecked="{Binding OpenMonitor}" OnContent="显示" OffContent="不显示" AutomationProperties.Name="新会话显示监控栏"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[widths]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="栏宽"/><TextBlock Classes="hint" Text="拖动分隔条后会记住，用于之后打开的会话；双击分隔条也能恢复默认。"/></StackPanel>
+              <Button Grid.Column="1" Classes="secondary" Content="恢复默认栏宽" Command="{Binding ResetWidthsCommand}" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 监控阈值 -->
+        <StackPanel IsVisible="{Binding IsMonitor}">
+          <Border Classes="card" IsVisible="{Binding Shown[limits]}">
+            <StackPanel Spacing="4">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="监控阈值"/><TextBlock Classes="hint" Text="到什么程度算“注意”（黄）和“严重”（红）。只影响本机显示，不会向服务器发送任何内容，也不会发出告警消息。"/></StackPanel>
+                <Button Grid.Column="1" Classes="secondary" Content="恢复默认" Command="{Binding ResetThresholdsCommand}" IsVisible="{Binding LimitsChanged}" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid ColumnDefinitions="70,*,84" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="0" Margin="0,0,0,10">
+                <TextBlock Classes="h" Text="磁盘" Grid.RowSpan="3" VerticalAlignment="Top"/>
+                <TextBlock Classes="hint" Grid.Column="1" Grid.ColumnSpan="2" Text="已用百分比"/>
+                <Slider Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DiskWarning}" VerticalAlignment="Center" AutomationProperties.Name="磁盘：注意"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding DiskWarning, StringFormat='注意 {0:0}%'}" Foreground="{DynamicResource St.Warning}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DiskDanger}" VerticalAlignment="Center" AutomationProperties.Name="磁盘：严重"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding DiskDanger, StringFormat='严重 {0:0}%'}" Foreground="{DynamicResource St.Danger}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid ColumnDefinitions="70,*,84" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="0" Margin="0,0,0,10">
+                <TextBlock Classes="h" Text="CPU" Grid.RowSpan="3" VerticalAlignment="Top"/>
+                <TextBlock Classes="hint" Grid.Column="1" Grid.ColumnSpan="2" Text="一段时间的平均占用"/>
+                <Slider Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding CpuWarning}" VerticalAlignment="Center" AutomationProperties.Name="CPU：注意"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding CpuWarning, StringFormat='注意 {0:0}%'}" Foreground="{DynamicResource St.Warning}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding CpuDanger}" VerticalAlignment="Center" AutomationProperties.Name="CPU：严重"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding CpuDanger, StringFormat='严重 {0:0}%'}" Foreground="{DynamicResource St.Danger}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid ColumnDefinitions="70,*,84" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="0" Margin="0,0,0,10">
+                <TextBlock Classes="h" Text="内存" Grid.RowSpan="3" VerticalAlignment="Top"/>
+                <TextBlock Classes="hint" Grid.Column="1" Grid.ColumnSpan="2" Text="可用内存少于"/>
+                <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding MemoryWarning}" VerticalAlignment="Center" AutomationProperties.Name="内存：注意"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding MemoryWarning, StringFormat='注意 {0:0}%'}" Foreground="{DynamicResource St.Warning}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding MemoryDanger}" VerticalAlignment="Center" AutomationProperties.Name="内存：严重"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding MemoryDanger, StringFormat='严重 {0:0}%'}" Foreground="{DynamicResource St.Danger}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid ColumnDefinitions="70,*,84" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="0" Margin="0,0,0,10">
+                <TextBlock Classes="h" Text="负载" Grid.RowSpan="3" VerticalAlignment="Top"/>
+                <TextBlock Classes="hint" Grid.Column="1" Grid.ColumnSpan="2" Text="5 分钟负载是核数的几倍"/>
+                <Slider Grid.Row="1" Grid.Column="1" Minimum="0.5" Maximum="20" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding LoadWarning}" VerticalAlignment="Center" AutomationProperties.Name="负载：注意"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding LoadWarning, StringFormat='注意 {0:0.0}'}" Foreground="{DynamicResource St.Warning}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="0.5" Maximum="20" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding LoadDanger}" VerticalAlignment="Center" AutomationProperties.Name="负载：严重"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding LoadDanger, StringFormat='严重 {0:0.0}'}" Foreground="{DynamicResource St.Danger}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 快捷键 -->
+        <StackPanel IsVisible="{Binding IsKeys}">
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="快捷键"/><TextBlock Classes="hint" Text="点一下右边的组合，再按新的组合；Esc 取消。窗口的快捷键不会发给终端里的程序，所以不能用单独的按键、Ctrl+字母、Alt 等属于程序的组合：macOS 用 ⌘，其他系统用 Ctrl+Shift+字母或功能键。"/></StackPanel>
+                <Button Grid.Column="1" Classes="secondary" Content="全部恢复默认" Command="{Binding ResetKeysCommand}" IsVisible="{Binding KeysChanged}" VerticalAlignment="Top"/>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Keys}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:ShortcutItem">
+                    <StackPanel>
+                      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6" MinHeight="30">
+                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Classes="link" Content="恢复默认" FontSize="11.5" Command="{Binding ResetCommand}" IsVisible="{Binding IsChanged}" ToolTip.Tip="{Binding Standard}" VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Classes="link" Content="停用" FontSize="11.5" Command="{Binding OffCommand}" IsVisible="{Binding CanTurnOff}" VerticalAlignment="Center"/>
+                        <Button Grid.Column="3" Classes="key" Classes.capturing="{Binding IsCapturing}" Content="{Binding Keys}" Command="{Binding ChangeCommand}" IsEnabled="{Binding CanChange}" VerticalAlignment="Center" AutomationProperties.Name="{Binding Title}"/>
+                      </Grid>
+                      <TextBlock Classes="hint bad" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="hint" Text="终端文字缩放用的是终端本来就占用的组合，不能改。另外：macOS 上第 1–9 个会话用 ⌘数字；在终端或编辑器上按住 Cmd（其他系统 Ctrl）滚动滚轮改变文字大小；鼠标中键关闭页签；文件列表里 F2 重命名、Delete 删除、F5 刷新、Enter 打开；编辑器里 Ctrl+G 跳到行、Ctrl+H（macOS ⌘⌥F）替换；可以把本机文件和文件夹拖到文件栏上传。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 备份恢复 -->
+        <StackPanel IsVisible="{Binding IsBackup}">
+          <Border Classes="card" IsVisible="{Binding Shown[backup]}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="备份到文件"/><TextBlock Classes="hint" Text="设置、快速命令、连接、分组和隧道。不含密码、私钥口令、动态令牌种子、会话环境变量和主机指纹。快速命令和“初始执行”按原文保存，其中如果写了密码，也会在备份文件里。"/></StackPanel>
+              <Button Grid.Column="1" Classes="secondary" Content="备份…" Command="{Binding BackupCommand}" IsEnabled="{Binding CanBackup}" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[restore]}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="从文件恢复"/><TextBlock Classes="hint" Text="已有的连接和快速命令保持不变，只添加缺少的；设置整体替换，原来的设置文件改名保留。"/></StackPanel>
+                <Button Grid.Column="1" Classes="secondary" Content="选择备份文件…" Command="{Binding OpenBackupCommand}" IsEnabled="{Binding CanBackup}" VerticalAlignment="Center"/>
+              </Grid>
+              <StackPanel Spacing="6" IsVisible="{Binding HasOpened}">
+                <TextBlock Text="{Binding OpenedText}" TextWrapping="Wrap" FontSize="12.5"/>
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                  <CheckBox Content="设置" IsChecked="{Binding RestoreSettings}"/>
+                  <CheckBox Content="快速命令" IsChecked="{Binding RestoreQuick}"/>
+                  <CheckBox Content="连接、分组和隧道" IsChecked="{Binding RestoreConnections}"/>
+                </StackPanel>
+                <CheckBox IsChecked="{Binding RestoreTrusted}">
+                  <TextBlock TextWrapping="Wrap" FontSize="12" Text="这是我自己做的备份：同时恢复会自动执行或影响本机的内容（连接的初始执行、保活命令、算法偏好；空闲保活；本地终端程序；默认下载目录；粘贴确认、右键菜单、选中即复制；监控阈值；快捷键）"/>
+                </CheckBox>
+                <TextBlock Classes="hint" Text="{Binding PlanText}" TextWrapping="Wrap"/>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                  <Button Classes="secondary" Content="取消" Command="{Binding CancelRestoreCommand}"/>
+                  <Button Classes="primary" Content="恢复" Command="{Binding RestoreCommand}"/>
+                </StackPanel>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <Border IsVisible="{Binding HasBackupStatus}" Background="{DynamicResource St.Notice}" CornerRadius="5" Padding="10,7"><TextBlock Text="{Binding BackupStatus}" FontSize="12" TextWrapping="Wrap"/></Border>
+        </StackPanel>
+
+        <!-- 通用终端 -->
+        <StackPanel IsVisible="{Binding IsTerminal}">
+          <Border Classes="card" IsVisible="{Binding ShowScheme}">
+            <Grid ColumnDefinitions="*,260">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="终端配色"/><TextBlock Classes="hint" Text="“跟随主题”随明亮 / 暗夜切换；其他配色固定不变。对已打开的终端立即生效。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding Schemes}" SelectedItem="{Binding Scheme}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="终端配色">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate DataType="vm:SchemeItem">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Border Background="{Binding Background}" CornerRadius="3" Padding="5,2" BorderBrush="{DynamicResource St.Line}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                          <TextBlock Text="Aa" Foreground="{Binding Foreground}" FontSize="11" FontFamily="Menlo, Consolas, monospace" VerticalAlignment="Center"/>
+                          <ItemsControl ItemsSource="{Binding Dots}" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate><DataTemplate DataType="IBrush"><Ellipse Width="7" Height="7" Fill="{Binding}"/></DataTemplate></ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </Border>
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowTermFont}">
+            <Grid ColumnDefinitions="*,240">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="终端字体"/><TextBlock Classes="hint" Text="只列出本机已安装的等宽字体；缺字时仍按内置等宽字体回退。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding TerminalFonts}" SelectedItem="{Binding TerminalFont}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="终端字体"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowTermSize}">
+            <Grid ColumnDefinitions="Auto,*,50">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="终端字号"/><TextBlock Classes="hint" Text="对已打开和新打开的终端生效。"/></StackPanel>
+              <Slider Grid.Column="1" Minimum="10" Maximum="24" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding TerminalFontSize}" VerticalAlignment="Center" AutomationProperties.Name="终端字号"/>
+              <TextBlock Grid.Column="2" Text="{Binding TerminalFontSize}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowCursor}">
+            <Grid ColumnDefinitions="*,130,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="光标"/><TextBlock Classes="hint" Text="立即生效；程序自己设置过光标的终端以程序为准。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding CursorStyles}" SelectedItem="{Binding CursorStyle}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="光标样式"/>
+              <CheckBox Grid.Column="2" Content="闪烁" IsChecked="{Binding CursorBlink}" Margin="14,0,0,0" VerticalAlignment="Center" AutomationProperties.Name="光标闪烁"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowScrollback}">
+            <Grid ColumnDefinitions="*,130">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="回滚行数"/><TextBlock Classes="hint" Text="每个终端保留的历史行数，越大占用内存越多。对新打开的终端生效。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding Scrollbacks}" SelectedItem="{Binding Scrollback}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="回滚行数"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowRightClick}">
+            <Grid ColumnDefinitions="*,160">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="右键菜单"/><TextBlock Classes="hint" Text="“复制 / 粘贴”：有选中内容时复制，没有时粘贴。程序接管鼠标时（如 htop、vim）右键交给程序，按住 Shift 仍由终端处理。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding RightClickChoices}" SelectedItem="{Binding RightClick}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="右键菜单"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowPaste}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="粘贴确认"/><TextBlock Classes="hint" Text="粘贴多行、很长或含控制字符的内容前，先预览确认。无论是否开启，控制字符都会去掉（换行和制表符保留）。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding ConfirmPaste}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="粘贴确认"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowCopySelect}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="选中即复制"/><TextBlock Classes="hint" Text="用鼠标选中终端内容后，松开即复制到剪贴板。"/></StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding CopyOnSelect}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="选中即复制"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowRecord}">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="h" Text="会话记录"/>
+              <TextBlock Classes="hint" Text="在终端右键菜单中选择“记录会话到文件”，由你选择保存位置；从光标所在的那一行起记录这个终端的输出，以明文文本保存，不记录按键，不会自动开始，不覆盖已有文件。行内编辑和进度条按最后的样子记录；vim、less、htop 等切换到备用屏幕的全屏程序不记录画面，top 这类直接在原屏幕刷新的程序会逐屏记录。"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[idle]}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="空闲保活"/><TextBlock Classes="hint" Text="一段时间没有键盘输入时，自动向终端发送一次输入，让按空闲时间断开的堡垒机和服务器认为你还在。打开后对所有 SSH / Telnet 会话生效，包括控制器唤醒的会话；也可以在终端右键菜单里只对某个会话开关。断线后不会重连。请先确认单位的规定允许。"/></StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding IdleKeepAlive}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="空闲保活"/>
+              </Grid>
+              <Grid ColumnDefinitions="*,190" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
+                <TextBlock Text="多少分钟没有键盘输入时发送" VerticalAlignment="Center" FontSize="12.5"/>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding IdleMinutesChoices}" SelectedItem="{Binding IdleMinutes}" HorizontalAlignment="Stretch" AutomationProperties.Name="空闲保活分钟数"/>
+                <TextBlock Grid.Row="1" Text="发送的内容" VerticalAlignment="Center" FontSize="12.5"/>
+                <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding IdleInputs}" SelectedItem="{Binding IdleInput}" HorizontalAlignment="Stretch" AutomationProperties.Name="空闲保活内容"/>
+                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Classes="hint" Text="{Binding IdleInputNote}"/>
+                <TextBlock Grid.Row="3" Text="最长保持多少小时（之后停止，按键后重新计时）" VerticalAlignment="Center" FontSize="12.5"/>
+                <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding IdleHoursChoices}" SelectedItem="{Binding IdleHours}" HorizontalAlignment="Stretch" AutomationProperties.Name="空闲保活小时数"/>
+                <StackPanel Grid.Row="4" Spacing="2" Margin="0,0,12,0"><TextBlock Text="全屏程序里也发送" FontSize="12.5"/><TextBlock Classes="hint" Text="vim、less、htop、tmux 等。默认不发送，以免影响正在运行的程序；在 tmux 里长期工作时才需要打开。"/></StackPanel>
+                <ToggleSwitch Grid.Row="4" Grid.Column="1" IsChecked="{Binding IdleFullScreen}" OnContent="已启用" OffContent="不启用" HorizontalAlignment="Right" AutomationProperties.Name="全屏程序里也发送空闲保活"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowProtect}">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="h" Text="会话保护"/>
+              <TextBlock Classes="hint" Text="SSH 协议心跳默认 15 秒（保存的连接可在“连接设置”中调整或关闭），SFTP 和 FTP 用同样的间隔做只读查询；都不向终端输入任何内容。Telnet 没有协议心跳。心跳能防止网络设备因空闲断开，但不能代替键盘输入：按空闲时间踢人的堡垒机仍可能断开会话，这时用上面的“空闲保活”。不自动重连、不重复使用堡垒机临时票据。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 自定义高亮 -->
+        <StackPanel IsVisible="{Binding IsHighlight}">
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0">
+                <TextBlock Classes="h" Text="自定义高亮"/>
+                <TextBlock Classes="hint" Text="给终端里匹配的文字上色，只影响显示。程序自己上过色的文字、全屏程序和反色屏幕不改。颜色取自终端配色；重叠时上面的规则优先；按屏幕上的一行匹配，被折行的文字不跨行。规则里写 (?&lt;k&gt;…) 时只给这一部分上色。"/>
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Highlight}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="自定义高亮"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsEnabled="{Binding Highlight}">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Classes="h" Text="规则（正则表达式）" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Classes="link" Content="恢复默认规则" FontSize="11.5" Command="{Binding ResetRulesCommand}" Margin="0,0,10,0"/>
+                <Button Grid.Column="2" Classes="secondary" Content="添加规则" Command="{Binding AddRuleCommand}" IsEnabled="{Binding CanAddRule}"/>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Rules}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:HighlightRuleItem">
+                    <StackPanel Margin="0,0,0,6" Spacing="2">
+                      <Grid ColumnDefinitions="Auto,104,*,86,Auto,Auto,Auto,Auto">
+                        <CheckBox IsChecked="{Binding Enabled}" MinWidth="0" Margin="0,0,6,0" ToolTip.Tip="启用" AutomationProperties.Name="启用规则"/>
+                        <TextBox Grid.Column="1" Text="{Binding Name}" MaxLength="40" PlaceholderText="名称" Padding="7,4" VerticalContentAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="规则名称"/>
+                        <TextBox Grid.Column="2" Text="{Binding Pattern}" MaxLength="400" PlaceholderText="正则表达式" Padding="7,4" VerticalContentAlignment="Center" Margin="0,0,6,0" FontFamily="Menlo, Consolas, monospace" FontSize="12" AutomationProperties.Name="规则表达式"/>
+                        <ComboBox Grid.Column="3" ItemsSource="{Binding Colors}" SelectedItem="{Binding Color}" HorizontalAlignment="Stretch" Padding="7,3" AutomationProperties.Name="规则颜色">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate DataType="vm:HighlightColor">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Ellipse Width="9" Height="9" Fill="{Binding Brush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                              </StackPanel>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ToggleButton Grid.Column="4" Content="Aa" IsChecked="{Binding !IgnoreCase, Mode=TwoWay}" Padding="6,3" MinHeight="0" FontSize="11.5" Margin="6,0,0,0" ToolTip.Tip="区分大小写" AutomationProperties.Name="区分大小写"/>
+                        <Button Grid.Column="5" Classes="pane-icon" Command="{Binding UpCommand}" ToolTip.Tip="上移" Margin="4,0,0,0"><c:StrokeIcon Data="{StaticResource Icon.ArrowUp}" Width="11" Height="11"/></Button>
+                        <Button Grid.Column="6" Classes="pane-icon" Command="{Binding DownCommand}" ToolTip.Tip="下移"><c:StrokeIcon Data="{StaticResource Icon.ArrowDown}" Width="11" Height="11"/></Button>
+                        <Button Grid.Column="7" Classes="pane-icon" Command="{Binding RemoveCommand}" ToolTip.Tip="删除规则" AutomationProperties.Name="删除规则"><c:StrokeIcon Data="{StaticResource Icon.Trash}" Width="12" Height="12"/></Button>
+                      </Grid>
+                      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Classes="bad" FontSize="11.5" Margin="132,0,0,0"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 快速命令 -->
+        <StackPanel IsVisible="{Binding IsQuick}">
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="3" Margin="0,0,16,0">
+                <TextBlock Classes="h" Text="快速命令"/>
+                <TextBlock Classes="hint" Text="在终端工具栏或右键菜单中点一下，就输入到当前终端。以明文保存在本机，请不要写密码；导出连接时不包含。控制器唤醒的会话里，第一次使用前会先确认。"/>
+              </StackPanel>
+              <Button Grid.Column="1" Classes="secondary" Content="新建" Command="{Binding NewQuickCommand}" IsEnabled="{Binding HasQuickStore}" VerticalAlignment="Center" AutomationProperties.Name="新建快速命令"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding IsEditingQuick}">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="h" Text="{Binding QuickTitle}"/>
+              <TextBox Text="{Binding QuickName}" MaxLength="40" PlaceholderText="名称，例如 查看磁盘" AutomationProperties.Name="快速命令名称"/>
+              <TextBox Text="{Binding QuickText}" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="84" MaxHeight="200" PlaceholderText="命令，可多行" VerticalContentAlignment="Top" FontFamily="Menlo, Consolas, monospace" FontSize="12.5" AutomationProperties.Name="快速命令内容"/>
+              <StackPanel Orientation="Horizontal" Spacing="18">
+                <CheckBox Content="自动回车执行" IsChecked="{Binding QuickEnter}"/>
+                <CheckBox Content="每次执行前确认" IsChecked="{Binding QuickConfirm}"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Classes="secondary" Content="删除" Foreground="{DynamicResource St.Danger}" Command="{Binding DeleteQuickCommand}" IsVisible="{Binding IsExistingQuick}" AutomationProperties.Name="删除快速命令"/>
+                <Button Classes="secondary" Content="取消" Command="{Binding CancelQuickCommand}"/>
+                <Button Classes="primary" Content="保存" Command="{Binding SaveQuickCommand}" AutomationProperties.Name="保存快速命令"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding QuickError}" IsVisible="{Binding HasQuickError}" Classes="bad" FontSize="12" TextWrapping="Wrap" Margin="4,0,0,10"/>
+          <TextBlock Classes="hint" Text="还没有快速命令。" IsVisible="{Binding NoQuickCommands}" Margin="4,0,0,0"/>
+          <ItemsControl ItemsSource="{Binding QuickCommands}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="lib:QuickCommand">
+                <Border Classes="card" Padding="12,8" Margin="0,0,0,6">
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,12,0">
+                      <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock Text="{Binding Preview}" Classes="dim" FontSize="11.5" FontFamily="Menlo, Consolas, monospace" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="secondary" Content="编辑" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).EditQuickCommand}" CommandParameter="{Binding}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Classes="pane-icon" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).QuickUpCommand}" CommandParameter="{Binding}" ToolTip.Tip="上移" Margin="6,0,0,0"><c:StrokeIcon Data="{StaticResource Icon.ArrowUp}" Width="11" Height="11"/></Button>
+                    <Button Grid.Column="3" Classes="pane-icon" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).QuickDownCommand}" CommandParameter="{Binding}" ToolTip.Tip="下移"><c:StrokeIcon Data="{StaticResource Icon.ArrowDown}" Width="11" Height="11"/></Button>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- 本地终端 -->
+        <StackPanel IsVisible="{Binding IsLocal}">
+          <Border Classes="card" IsVisible="{Binding ShowShell}">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h" Text="默认程序"/>
+              <TextBlock Classes="hint" Text="本地终端启动的程序；找不到时改用系统默认（Windows 为 cmd.exe）。"/>
+              <TextBox Text="{Binding LocalShell}" PlaceholderText="例如 /bin/zsh 或 C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" AutomationProperties.Name="默认程序"/>
+              <TextBlock Text="{Binding LocalShellStatus}" FontSize="12" Foreground="{DynamicResource St.Accent}"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowShellArgs}">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h" Text="默认程序参数"/>
+              <TextBlock Classes="hint" Text="空格分隔，双引号可包含空格；直接传给程序，不经过 shell（在 Windows 上原样附加到命令行；批处理文件的参数会由 cmd 解释，因此不传）。默认程序找不到而改用系统默认时，也不传这些参数。"/>
+              <TextBox Text="{Binding LocalShellArgs}" PlaceholderText="例如 -l" FontFamily="Menlo, Consolas, monospace" AutomationProperties.Name="默认程序参数"/>
+              <TextBlock Text="{Binding LocalShellArgsStatus}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource St.TextDim}" Classes.bad="{Binding LocalShellArgsInvalid}"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding ShowLocalTerm}">
+            <Grid ColumnDefinitions="*,240">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="终端类型"/><TextBlock Classes="hint" Text="本地终端的 TERM，影响颜色能力、全屏程序和部分命令行工具的行为。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding TerminalTypes}" SelectedItem="{Binding LocalTerminalType}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="本地终端类型"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 关于 -->
+        <StackPanel IsVisible="{Binding IsAbout}">
+          <Border Classes="card" IsVisible="{Binding ShowAbout}">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h"><Run Text="Forterm Studio "/><Run Text="{Binding Version}"/></TextBlock>
+              <TextBlock Classes="hint"><Run Text="数据目录："/><Run Text="{Binding DataDirectory}"/></TextBlock>
+              <TextBlock Classes="hint" Text="堡垒机通过 xshell / xftp 入口唤醒本程序；临时票据只在内存中使用，不保存、不自动重连。保存的密码只在系统钥匙串 / 凭据管理器中。"/>
+              <TextBlock Classes="hint" Text="自动化验证使用本机回环的合成 SSH / SFTP / FTP 服务与软件渲染；Windows 实机、真实堡垒机、系统凭据库和输入法仍需现场验收。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>

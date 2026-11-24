@@ -1,0 +1,35 @@
+appId: cn.forterm.desktop
+productName: Forterm
+executableName: forterm
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+asar: true
+asarUnpack:
+  - node_modules/node-pty/**
+npmRebuild: false
+afterPack: scripts/after-pack.cjs
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+  signAndEditExecutable: false
+  artifactName: Forterm-${version}-${arch}.${ext}
+nsis:
+  artifactName: Forterm-${version}-${arch}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+portable:
+  artifactName: Forterm-${version}-${arch}-portable.${ext}
+mac:
+  target: dir
+  identity: null
+  category: public.app-category.developer-tools

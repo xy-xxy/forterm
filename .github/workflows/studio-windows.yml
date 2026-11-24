@@ -1,0 +1,56 @@
+name: Forterm Studio (Windows)
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  studio-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: avalonia
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: avalonia/global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Loopback fixture environment (127.0.0.1 only, synthetic credentials)
+        shell: pwsh
+        run: |
+          python -m venv tooling/fixture-venv
+          tooling/fixture-venv/Scripts/python -m pip install --disable-pip-version-check -r tooling/fixture-requirements.lock.txt
+      - run: dotnet restore src/Forterm.Studio --locked-mode
+      - run: dotnet restore tests/Forterm.Studio.Tests --locked-mode
+      - name: Studio tests (headless UI + loopback SSH/SFTP/FTP)
+        run: dotnet test tests/Forterm.Studio.Tests --no-restore --logger trx --results-directory ../test-results/studio
+      - name: Publish the four entries (Forterm, xshell, xftp, forterm-diagnose)
+        shell: pwsh
+        run: |
+          $out = "artifacts/studio-ci-win-x64"
+          foreach ($p in 'Forterm.Studio', 'Forterm.Launcher', 'Forterm.Diagnose') {
+            dotnet restore "src/$p" --locked-mode
+            dotnet publish "src/$p" -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=false -p:PublishTrimmed=false -o $out
+          }
+          Copy-Item "$out/Forterm.Launcher.exe" "$out/xshell.exe"
+          Copy-Item "$out/Forterm.Launcher.exe" "$out/xftp.exe"
+          Move-Item "$out/Forterm.Diagnose.exe" "$out/forterm-diagnose.exe"
+          Remove-Item "$out/Forterm.Launcher.exe"
+      - name: Entry chain without opening a window
+        shell: pwsh
+        run: |
+          $out = "artifacts/studio-ci-win-x64"
+          $check = Start-Process "$out/Forterm.exe" -ArgumentList '--runtime-check' -Wait -PassThru -NoNewWindow
+          if ($check.ExitCode -ne 0) { throw "runtime-check failed" }
+          $ok = Start-Process "$out/xshell.exe" -ArgumentList '--diagnose', '-url', 'ssh://t:p@h:22' -Wait -PassThru -NoNewWindow
+          if ($ok.ExitCode -ne 0) { throw "xshell --diagnose should forward exit code 0" }
+          $bad = Start-Process "$out/xftp.exe" -ArgumentList '--diagnose', '-url', 'ssh://t:p@h:22', '-bogus' -Wait -PassThru -NoNewWindow
+          if ($bad.ExitCode -ne 2) { throw "xftp should forward exit code 2 for rejected arguments" }
+          $diag = Start-Process "$out/forterm-diagnose.exe" -ArgumentList '-url', 'sftp://t:p@h:22' -Wait -PassThru -NoNewWindow
+          if ($diag.ExitCode -ne 0) { throw "forterm-diagnose failed" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Forterm-Studio-Windows-x64
+          path: |
+            avalonia/artifacts/studio-ci-win-x64/**
+            test-results/studio/**

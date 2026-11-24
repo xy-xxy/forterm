@@ -1,0 +1,1 @@
+<Project><PropertyGroup><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers><LangVersion>latest</LangVersion><Deterministic>true</Deterministic><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><Version>0.3.0-alpha.36</Version><Company>Forterm</Company></PropertyGroup></Project>

@@ -1,0 +1,392 @@
+[
+  {
+    "package": "Avalonia/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Angle.Windows.Natives/2.1.27548.20260419",
+    "license": "LICENSE",
+    "licenseType": "file",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/angle/",
+      "commit": "1c89805903c1482166356d3b950d474973180e61"
+    }
+  },
+  {
+    "package": "Avalonia.BuildServices/11.3.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia.BuildServices",
+      "commit": "777f975b0a0cecf0311273711d56697212c558c0"
+    }
+  },
+  {
+    "package": "Avalonia.Desktop/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.FreeDesktop/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.FreeDesktop.AtSpi/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.HarfBuzz/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Native/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Remote.Protocol/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Skia/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Themes.Fluent/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.Win32/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "Avalonia.X11/12.0.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/Avalonia/",
+      "commit": "a8dd6417fd8918570edefdbecd92d16ac7620069"
+    }
+  },
+  {
+    "package": "BouncyCastle.Cryptography/2.7.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/bcgit/bc-csharp",
+      "branch": "refs/heads/release/v2.7",
+      "commit": "4007498b13582d90ee1eda5d9920c324428b98b3"
+    }
+  },
+  {
+    "package": "HarfBuzzSharp/8.3.1.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "HarfBuzzSharp.NativeAssets.Linux/8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.2",
+      "commit": "2888c737ad016d584c74525e2d35db5097ea8576"
+    }
+  },
+  {
+    "package": "HarfBuzzSharp.NativeAssets.macOS/8.3.1.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "HarfBuzzSharp.NativeAssets.WebAssembly/8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.2",
+      "commit": "2888c737ad016d584c74525e2d35db5097ea8576"
+    }
+  },
+  {
+    "package": "HarfBuzzSharp.NativeAssets.Win32/8.3.1.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "Iciclecreek.Avalonia.Terminal/4.1.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tomlm/Iciclecreek.Avalonia.Terminal",
+      "commit": "0851f5190296f315f0ca09e4ba1ffc3cc365227e"
+    },
+    "fortermSourcePatch": "launch-ready-v16",
+    "vendoredSource": "vendor/Iciclecreek.Terminal"
+  },
+  {
+    "package": "MicroCom.Runtime/0.11.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/kekekeks/MicroCom",
+      "commit": "28850f85fb586488828ab7267ed4a87e8c970b51"
+    }
+  },
+  {
+    "package": "Microsoft.Extensions.DependencyInjection.Abstractions/8.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/runtime",
+      "commit": "81cabf2857a01351e5ab578947c7403a5b128ad1"
+    }
+  },
+  {
+    "package": "Microsoft.Extensions.Logging.Abstractions/8.0.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dotnet/runtime",
+      "commit": "eba546b0f0d448e0176a2222548fd7a2fbf464c0"
+    }
+  },
+  {
+    "package": "Microsoft.Windows.Console.ConPTY/1.24.260710001",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": null
+  },
+  {
+    "package": "Porta.Pty/2.2.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tomlm/Porta.Pty",
+      "commit": "0186b604bf40161f199823fe5cdb2dfa02c37bea"
+    }
+  },
+  {
+    "package": "SkiaSharp/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "SkiaSharp.HarfBuzz/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "SkiaSharp.NativeAssets.Linux/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "SkiaSharp.NativeAssets.macOS/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "SkiaSharp.NativeAssets.WebAssembly/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "SkiaSharp.NativeAssets.Win32/3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://go.microsoft.com/fwlink/?linkid=868515",
+      "branch": "release/3.119.4",
+      "commit": "f568ac94dd768ef9a2f593537cfde2dd0d348ef5"
+    }
+  },
+  {
+    "package": "Tmds.DBus.Protocol/0.92.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tmds/Tmds.DBus.git",
+      "branch": "refs/heads/release/0.92",
+      "commit": "282acebca8d4e4e3ba211646ac650911ee94edfd"
+    }
+  },
+  {
+    "package": "Unicode.net/2.0.0",
+    "license": "LICENSE",
+    "licenseType": "file",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/neosmart/unicode.net",
+      "commit": "43e575d4f38267b3c41a869a1b7cc0708c30db76"
+    }
+  },
+  {
+    "package": "Wcwidth/4.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/spectreconsole/wcwidth",
+      "commit": "64a3f523d5dc27124e04ff9079137ac2c5c72143"
+    }
+  },
+  {
+    "package": "XTerm.NET/3.0.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tomlm/XTerm.NET",
+      "commit": "453ed957885f2e87c777e9b4f0b88a3582065eab"
+    },
+    "fortermSourcePatch": "resize-grid-v15",
+    "vendoredSource": "vendor/XTerm.NET"
+  },
+  {
+    "package": "Avalonia.AvaloniaEdit/12.0.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/AvaloniaUI/AvaloniaEdit/",
+      "commit": "86fdebec4cff7affb0e14c7885df71d28edce777"
+    }
+  },
+  {
+    "package": "FluentFTP/55.1.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/robinrodricks/FluentFTP",
+      "commit": "f051d6425342bc99617d933af3580f718c381f64"
+    }
+  },
+  {
+    "package": "NSIS/3.04-native-arm64-builder",
+    "purpose": "installer bootstrap, official 3.04 source with Python3/SCons build-script compatibility; matching 8192/log Windows stubs from electron-builder 3.0.4.1",
+    "licenseFile": "NSIS-COPYING",
+    "compilerSHA256": "a9bd745e834f36d3cc71f09c0eaabc01fdd35ca650e165385e312b11b6adb9e4",
+    "sourceArchiveSHA256": "609536046c50f35cfd909dd7df2ab38f2e835d0da3c1048aa0d48c59c5a4f4f5"
+  }
+]

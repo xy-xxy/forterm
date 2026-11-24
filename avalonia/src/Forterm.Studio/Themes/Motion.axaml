@@ -1,0 +1,126 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:Forterm.Studio.Controls">
+  <!-- "界面动画". Installed as a whole by Services/Motion.cs, so switching it off leaves nothing behind.
+       Short (0.12–0.24 s), ease-out, and never on anything that changes the terminal's size. -->
+
+  <!-- hover and press -->
+  <Style Selector="Button.flat /template/ ContentPresenter, Button.pane-icon /template/ ContentPresenter, Button.title-icon /template/ ContentPresenter, Button.rail /template/ ContentPresenter, Button.session-tab /template/ ContentPresenter, Button.crumb /template/ ContentPresenter, Button.primary /template/ ContentPresenter, Button.secondary /template/ ContentPresenter, Button.row /template/ ContentPresenter, Button.choice /template/ ContentPresenter, Button.seg /template/ ContentPresenter, Button.nav /template/ ContentPresenter, Button.link /template/ ContentPresenter, Button.chip-close /template/ ContentPresenter">
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.14" Easing="CubicEaseOut"/>
+        <BrushTransition Property="Foreground" Duration="0:0:0.14" Easing="CubicEaseOut"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.flat, Button.pane-icon, Button.title-icon, Button.rail, Button.chip-close, Button.primary, Button.secondary">
+    <Setter Property="RenderTransform" Value="scale(1)"/>
+    <Setter Property="Transitions">
+      <Transitions><TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="CubicEaseOut"/></Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.flat:pressed, Button.pane-icon:pressed, Button.title-icon:pressed, Button.rail:pressed, Button.chip-close:pressed"><Setter Property="RenderTransform" Value="scale(0.88)"/></Style>
+  <Style Selector="Button.primary:pressed, Button.secondary:pressed"><Setter Property="RenderTransform" Value="scale(0.97)"/></Style>
+  <Style Selector="Border.pane-chip">
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.16"/>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.16"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Thumb.splitter">
+    <Setter Property="Transitions"><Transitions><BrushTransition Property="Background" Duration="0:0:0.16"/></Transitions></Setter>
+  </Style>
+
+  <!-- tabs arrive -->
+  <Style Selector="Button.session-tab, Button.chip-tab">
+    <Style.Animations>
+      <Animation Duration="0:0:0.22" Easing="CubicEaseOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- menus, flyouts, drop-downs and tips open -->
+  <Style Selector="FlyoutPresenter, MenuFlyoutPresenter, ContextMenu, ToolTip">
+    <Style.Animations>
+      <Animation Duration="0:0:0.16" Easing="CubicEaseOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="TranslateTransform.Y" Value="-6"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Style.Animations>
+      <Animation Duration="0:0:0.16" Easing="CubicEaseOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="TranslateTransform.Y" Value="-5"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- something to read appears -->
+  <Style Selector="Border.reveal[IsVisible=True]">
+    <Style.Animations>
+      <Animation Duration="0:0:0.2" Easing="CubicEaseOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="TranslateTransform.Y" Value="-6"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <Style Selector="Border.toast">
+    <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.16"/></Transitions></Setter>
+    <Style.Animations>
+      <Animation Duration="0:0:0.24" Easing="CubicEaseOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="TranslateTransform.X" Value="28"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/><Setter Property="TranslateTransform.X" Value="0"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="Border.toast.leaving"><Setter Property="Opacity" Value="0"/></Style>
+
+  <!-- trees, meters, progress -->
+  <Style Selector="ToggleButton /template/ c|StrokeIcon#Icon">
+    <Setter Property="RenderTransform" Value="rotate(0deg)"/>
+    <Setter Property="Transitions"><Transitions><TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="CubicEaseOut"/></Transitions></Setter>
+  </Style>
+  <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="Transitions"><Transitions><BrushTransition Property="Background" Duration="0:0:0.12"/></Transitions></Setter>
+  </Style>
+  <Style Selector="c|Meter">
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Value" Duration="0:0:0.45" Easing="CubicEaseOut"/>
+        <DoubleTransition Property="Secondary" Duration="0:0:0.45" Easing="CubicEaseOut"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="ProgressBar.thin">
+    <Setter Property="Transitions"><Transitions><DoubleTransition Property="Value" Duration="0:0:0.25" Easing="CubicEaseOut"/></Transitions></Setter>
+  </Style>
+
+  <Style Selector="ListBoxItem StackPanel.actions">
+    <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.14"/></Transitions></Setter>
+  </Style>
+
+  <!-- alive: waiting for a connection, recording -->
+  <Style Selector="c|BusyRing[IsActive=True]">
+    <Style.Animations>
+      <Animation Duration="0:0:0.9" IterationCount="INFINITE">
+        <KeyFrame Cue="0%"><Setter Property="Angle" Value="0"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Angle" Value="360"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="Ellipse.pulse[IsVisible=True]">
+    <Style.Animations>
+      <Animation Duration="0:0:1.4" IterationCount="INFINITE" PlaybackDirection="Alternate" Easing="SineEaseInOut">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.3"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+</Styles>

@@ -1,0 +1,102 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Forterm.Studio.ViewModels"
+        xmlns:c="using:Forterm.Studio.Controls"
+        x:Class="Forterm.Studio.Views.ProcessWindow"
+        x:DataType="vm:ProcessListViewModel"
+        Title="{Binding Title}" Width="980" Height="600" MinWidth="640" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource St.Dialog}">
+  <Window.Styles>
+    <Style Selector="Button.sort">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+    <Style Selector="Button.sort:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource St.Text}"/></Style>
+    <Style Selector="ListBox.procs ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="MinHeight" Value="30"/></Style>
+    <Style Selector="Button.signal">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Button.sort.right"><Setter Property="HorizontalAlignment" Value="Right"/></Style>
+    <Style Selector="ListBox.procs ListBoxItem:selected /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/></Style>
+    <!-- what ends a process shows on the row being looked at -->
+    <Style Selector="ListBoxItem StackPanel.actions"><Setter Property="Opacity" Value="0"/></Style>
+    <Style Selector="ListBoxItem:pointerover StackPanel.actions, ListBoxItem:selected StackPanel.actions, ListBoxItem:focus StackPanel.actions"><Setter Property="Opacity" Value="1"/></Style>
+    <Style Selector="Button.signal.danger"><Setter Property="Foreground" Value="{DynamicResource St.Danger}"/></Style>
+  </Window.Styles>
+  <DockPanel Margin="12">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,10">
+      <TextBox Text="{Binding Search}" PlaceholderText="搜索 PID / 用户 / 命令" AutomationProperties.Name="搜索进程"/>
+      <TextBlock Grid.Column="1" Text="{Binding CountText}" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="12,0"/>
+      <ToggleSwitch Grid.Column="2" IsChecked="{Binding AutoRefresh}" OnContent="自动刷新" OffContent="自动刷新" FontSize="12" MinWidth="0" Margin="0,0,8,0"/>
+      <Button Grid.Column="3" Classes="secondary" Command="{Binding RefreshCommand}" AutomationProperties.Name="刷新进程">
+        <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="12" Height="12"/><TextBlock Text="刷新"/></StackPanel>
+      </Button>
+    </Grid>
+    <Border DockPanel.Dock="Top" IsVisible="{Binding HasNotice}" Background="{DynamicResource St.Notice}" CornerRadius="5" Padding="8,5" Margin="0,0,0,8">
+      <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" FontSize="12"/>
+    </Border>
+    <Border DockPanel.Dock="Top" Background="{DynamicResource St.Card}" CornerRadius="6" Height="32">
+      <Grid ColumnDefinitions="70,100,76,74,96,124,*,150" Margin="12,0">
+        <Button Classes="sort" Command="{Binding SortCommand}" CommandParameter="pid" Content="{Binding PidHead}" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="sort" Command="{Binding SortCommand}" CommandParameter="user" Content="{Binding UserHead}" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="2" Text="状态" Classes="dim" FontSize="12" VerticalAlignment="Center"/>
+        <Button Grid.Column="3" Classes="sort right" Command="{Binding SortCommand}" CommandParameter="cpu" Content="{Binding CpuHead}" VerticalAlignment="Center"/>
+        <Button Grid.Column="4" Classes="sort right" Command="{Binding SortCommand}" CommandParameter="mem" Content="{Binding MemoryHead}" VerticalAlignment="Center"/>
+        <Button Grid.Column="5" Classes="sort" Command="{Binding SortCommand}" CommandParameter="start" Content="{Binding StartHead}" VerticalAlignment="Center" Margin="18,0,0,0"/>
+        <TextBlock Grid.Column="6" Text="命令" Classes="dim" FontSize="12" VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+    <Panel>
+      <ListBox Name="Rows" Classes="procs" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" Background="Transparent" Margin="0,2,0,0">
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="vm:ProcessRow">
+            <Grid Name="Row" ColumnDefinitions="70,100,76,74,96,124,*,150" Margin="12,0" Height="34" Background="Transparent">
+              <Grid.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="复制 PID" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).CopyPidCommand}" CommandParameter="{Binding}"/>
+                  <MenuItem Header="复制完整命令" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).CopyCommandCommand}" CommandParameter="{Binding}"/>
+                  <Separator IsVisible="{Binding CanSignal}"/>
+                  <MenuItem Header="结束" IsVisible="{Binding CanSignal}" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).TerminateCommand}" CommandParameter="{Binding}"/>
+                  <MenuItem Header="强制结束" Classes="danger" IsVisible="{Binding CanSignal}" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).KillCommand}" CommandParameter="{Binding}"/>
+                </ContextMenu>
+              </Grid.ContextMenu>
+              <TextBlock Text="{Binding Pid}" VerticalAlignment="Center" FontSize="12.5" FontFeatures="tnum"/>
+              <TextBlock Grid.Column="1" Text="{Binding User}" VerticalAlignment="Center" FontSize="12.5" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" ToolTip.Tip="{Binding State}">
+                <c:StrokeIcon Data="{StaticResource Icon.Warning}" Brush="{DynamicResource St.Warning}" Width="12" Height="12" IsVisible="{Binding IsStuck}"/>
+                <TextBlock Text="{Binding StateText}" FontSize="12" Classes="dim"/>
+              </StackPanel>
+              <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="3" Margin="10,0,0,0">
+                <TextBlock Text="{Binding Cpu}" FontSize="12.5" FontFeatures="tnum" HorizontalAlignment="Right"/>
+                <c:Meter Height="3" Value="{Binding CpuShare}" Fill="{DynamicResource St.Data1}"/>
+              </StackPanel>
+              <StackPanel Grid.Column="4" VerticalAlignment="Center" Spacing="3" Margin="18,0,0,0">
+                <TextBlock Text="{Binding Memory}" FontSize="12.5" FontFeatures="tnum" HorizontalAlignment="Right"/>
+                <c:Meter Height="3" Value="{Binding MemoryShare}" Fill="{DynamicResource St.Data1}"/>
+              </StackPanel>
+              <TextBlock Grid.Column="5" Text="{Binding Started}" VerticalAlignment="Center" FontSize="12" Classes="dim" FontFeatures="tnum" Margin="18,0,0,0"/>
+              <Grid Grid.Column="6" ColumnDefinitions="Auto,*" ColumnSpacing="6" ToolTip.Tip="{Binding Command}" Margin="0,0,8,0" Background="Transparent">
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" MaxWidth="200" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="1" Text="{Binding Arguments}" Classes="dim" VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis"/>
+              </Grid>
+              <TextBlock Grid.Column="7" Text="不能结束" Classes="dim" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" IsVisible="{Binding !CanSignal}"/>
+              <StackPanel Grid.Column="7" Classes="actions" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" IsVisible="{Binding CanSignal}">
+                <Button Classes="signal" Content="结束" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).TerminateCommand}" CommandParameter="{Binding}" AutomationProperties.Name="结束进程"/>
+                <Button Classes="signal danger" Content="强制结束" Command="{Binding $parent[Window].((vm:ProcessListViewModel)DataContext).KillCommand}" CommandParameter="{Binding}" AutomationProperties.Name="强制结束进程"/>
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock IsVisible="{Binding IsEmpty}" Text="没有进程数据。点击“刷新”读取（需要 ps 命令）。" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Panel>
+  </DockPanel>
+</Window>
