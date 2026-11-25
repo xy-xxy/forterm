@@ -515,5 +515,9 @@ namespace Renci.SshNet
         /// The logger factory for this connection. If <see langword="null"/> then <see cref="SshNetLoggingConfiguration.LoggerFactory"/> is used.
         /// </value>
         public ILoggerFactory? LoggerFactory { get; set; }
+
+        // Forterm: the largest packet the server is told it may send on a channel; 0 is the library's own (64 KiB).
+        // OpenSSH says 32 KiB, PuTTY 16 KiB.
+        public uint ChannelPacketSize { get; set; }
     }
 }

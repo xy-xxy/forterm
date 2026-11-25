@@ -18,7 +18,7 @@ keypath=os.path.join(root.name,'synthetic-user-key.pem')
 os.mkdir(os.path.join(root.name,'a'));os.mkdir(os.path.join(root.name,'b'))
 if algorithm=='ed25519':open(keypath,'wb').write(encoded)
 else:userkey.write_private_key_file(keypath,password='synthetic-phrase' if os.getenv('FIXTURE_KEY_ENCRYPTED')=='1' else None)
-counts={'connections':0,'auth':0,'passwordRequests':0,'keyChecks':0,'openModes':[],'shells':0,'sftp':0,'forwarded':0,'globals':0,'lstats':0,'resizes':[],'resizesDetailed':[],'ptyRequests':[],'frameMarkers':{},'input':[],'sudoPrompts':0,'sudoPasswordBytes':0,'execs':0,'commands':[],'lists':[],'env':[],'negotiated':[]}
+counts={'connections':0,'auth':0,'passwordRequests':0,'keyChecks':0,'openModes':[],'shells':0,'sftp':0,'forwarded':0,'globals':0,'lstats':0,'resizes':[],'resizesDetailed':[],'ptyRequests':[],'frameMarkers':{},'input':[],'sudoPrompts':0,'sudoPasswordBytes':0,'execs':0,'commands':[],'lists':[],'env':[],'negotiated':[],'opens':[],'ptyModes':[]}
 lock=threading.Lock()
 transports=[]
 shell_channels=[]
@@ -39,6 +39,27 @@ def _recording_parse_kex_init(self,*args,**kwargs):
  if self.server_mode:self.fixture_kex=next((k for k in parsed['kex_algo_list'] if k in self.preferred_kex),'')
  return parsed
 paramiko.Transport._really_parse_kex_init=_recording_parse_kex_init
+# FIXTURE_ODD, what some servers do after the login: 'close-after-login', 'close-on-open', 'close-on-request' (the connection ends
+# without a word), 'disconnect-on-open' (with one), 'refuse' (every session channel, with FIXTURE_TEXT), 'refuse-then-close' (the
+# second time a channel is asked for, the connection ends). FIXTURE_BANNER: shown before the login is complete.
+odd=os.getenv('FIXTURE_ODD','')
+odd_text=os.getenv('FIXTURE_TEXT','')
+def hang_up(transport):
+ try:transport.sock.shutdown(socket.SHUT_RDWR)
+ except OSError:pass
+_parse_channel_open=paramiko.Transport._parse_channel_open
+def _odd_channel_open(self,m):
+ kind=m.get_text();chanid=m.get_int();window=m.get_int();packet=m.get_int();m.rewind()
+ if not self.server_mode:return _parse_channel_open(self,m)
+ with lock:counts['opens'].append({'kind':kind,'window':window,'packet':packet});asked=len(counts['opens'])
+ if odd=='close-after-login':return
+ if odd=='close-on-open' or odd=='refuse-then-close' and asked>1:return hang_up(self)
+ if odd=='disconnect-on-open':
+  bye=paramiko.Message();bye.add_byte(bytes([1]));bye.add_int(11);bye.add_string(odd_text);bye.add_string('en');self._send_message(bye);return hang_up(self)
+ if odd in ('refuse','refuse-then-close') and kind=='session':
+  no=paramiko.Message();no.add_byte(bytes([92]));no.add_int(chanid);no.add_int(2);no.add_string(odd_text);no.add_string('en');return self._send_message(no)
+ return _parse_channel_open(self,m)
+paramiko.Transport._parse_channel_open=_odd_channel_open
 def snapshot():
  with lock:
   result=dict(counts);result['activeTransports']=sum(1 for t in transports if t.is_active());return result
@@ -59,6 +80,7 @@ def studio_monitor(n):
 release_shell=threading.Event()
 class Server(paramiko.ServerInterface):
  def __init__(self):self.round=0;self.partial=False;self.destinations={}
+ def get_banner(self):return (os.getenv('FIXTURE_BANNER'),'en') if os.getenv('FIXTURE_BANNER') else (None,None)
  def check_auth_password(self,user,password):
   with lock:counts['auth']+=1;counts['passwordRequests']+=1
   if os.getenv('FIXTURE_AUTH')=='keyboard-then-password':return paramiko.AUTH_SUCCESSFUL if self.partial and password=='synthetic-fresh' else paramiko.AUTH_FAILED
@@ -98,6 +120,8 @@ class Server(paramiko.ServerInterface):
   return paramiko.OPEN_SUCCEEDED
  def check_channel_request(self,kind,chanid):return paramiko.OPEN_SUCCEEDED if kind=='session' else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
  def check_channel_pty_request(self,ch,term,w,h,pw,ph,modes):
+  if odd=='close-on-request':hang_up(ch.get_transport());return False
+  with lock:counts['ptyModes'].append(modes.hex() if isinstance(modes,bytes) else str(modes))
   with lock:counts["ptyRequests"].append([ch.get_id(),w,h]);shell_sizes[ch.get_id()]=(w,h)
   with lock:counts.setdefault('terms',[]).append(term.decode('ascii','replace') if isinstance(term,bytes) else str(term))
   return True
@@ -189,6 +213,7 @@ class Server(paramiko.ServerInterface):
    except Exception:pass
   threading.Thread(target=respond,daemon=True).start();return True
  def check_channel_subsystem_request(self,ch,name):
+  if odd=='close-on-request':hang_up(ch.get_transport());return False
   if name!='sftp' or os.getenv('FIXTURE_DENY_SFTP')=='1':return False
   with lock:counts['sftp']+=1
   return super().check_channel_subsystem_request(ch,name)
@@ -331,6 +356,7 @@ def accept():
     server=Server();accepted_channels=[];t.start_server(server=server)
     with lock:counts['negotiated'].append({'kex':getattr(t,'fixture_kex',''),'hostKey':t.host_key_type,'cipher':t.remote_cipher})
     while t.is_active():
+     if odd=='close-after-login' and t.is_authenticated():hang_up(t)
      channel=t.accept(.03)
      if channel is not None:accepted_channels[:]=[c for c in accepted_channels if not c.closed];accepted_channels.append(channel)
      if channel is not None and channel.get_id() in server.destinations:
@@ -403,6 +429,9 @@ for line in sys.stdin:
    except Exception:pass
   threading.Thread(target=flood,daemon=True).start();print(json.dumps({'floodStarted':True}),flush=True)
  if line.strip()=='release-shell':release_shell.set();print(json.dumps({'released':True}),flush=True)
+ if line.strip()=='drop':
+  for t in transports:hang_up(t)
+  print(json.dumps({'dropped':True}),flush=True)
  if line.strip()=='close-shell':shell_channels[-1].close();print(json.dumps({'closed':True}),flush=True)
  if line.strip()=='flood-past-window':
   def flood_past_window():

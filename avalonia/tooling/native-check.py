@@ -4,6 +4,7 @@ what arrives. Own data directory; no credential store is read. Windows and macOS
 
   native-check.py --app FOLDER --out FOLDER      (run it with the fixture environment's python)"""
 import argparse, hashlib, json, os, pathlib, subprocess, sys, tempfile, threading, time, shutil
+for stream in (sys.stdout, sys.stderr): stream.reconfigure(encoding='utf-8', errors='replace')  # a Windows console may not know Chinese
 root = pathlib.Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(); p.add_argument('--app', required=True); p.add_argument('--out', required=True); p.add_argument('--idle', action='store_true')
 a = p.parse_args()

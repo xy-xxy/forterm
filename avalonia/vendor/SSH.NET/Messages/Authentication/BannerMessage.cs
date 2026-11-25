@@ -34,6 +34,13 @@
             get { return Utf8.GetString(_message, 0, _message.Length); }
         }
 
+        // Forterm: with the text, for the log. The event of ConnectionInfo misses a banner that arrives before the login
+        // methods listen for it.
+        public override string ToString()
+        {
+            return base.ToString() + " " + Message;
+        }
+
         /// <summary>
         /// Gets banner language.
         /// </summary>

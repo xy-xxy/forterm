@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
@@ -10,6 +11,7 @@ using Forterm.Studio.Library;
 using Forterm.Studio.Mvvm;
 using Forterm.Studio.Services;
 using Porta.Pty;
+using Renci.SshNet.Common;
 
 namespace Forterm.Studio.ViewModels;
 
@@ -47,6 +49,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     readonly KnownHosts knownHosts;
     readonly SessionConnectOptions options;
     readonly SessionSettings settings;
+    /// <summary>What is said to the server while it connects and opens its channels (SSH only).</summary>
+    readonly SshTrace? trace;
     readonly CancellationTokenSource lifetime = new();
     readonly CancellationTokenSource firstTerminalLifetime;
     readonly string keyPath;
@@ -64,8 +68,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     FileNodeViewModel? selectedNode;
     string rootPath = "/";
     int connectStarted, disposed, terminalNumber;
-    bool firstAttached, sshReady;
-    string environmentNotice = "";
+    bool firstAttached, sshReady, transportEnded, offerReport;
+    string environmentNotice = "", shellError = "";
     readonly Dictionary<TerminalTabViewModel, Task> openingShells = new();
 
     string status = "", fileMessage = "", fileNotice = "";
@@ -84,7 +88,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         this.keyPath = keyPath;
         this.interaction = interaction;
         this.knownHosts = knownHosts;
-        this.options = options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels };
+        if (kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp) trace = new SshTrace();
+        this.options = (options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels }) with { CommonChannels = true, Trace = trace };
         this.settings = settings ?? new SessionSettings();
         this.profile = profile;
         this.connector = connector;
@@ -110,6 +115,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         HideMonitorCommand = new RelayCommand(() => ShowMonitor = false);
         AddTerminalCommand = new AsyncCommand(async () => await AddTerminalAsync(), e => Status = "新建终端失败：" + Short(e.Message));
         DismissFileNoticeCommand = new RelayCommand(() => FileNotice = "");
+        CopyReportCommand = new AsyncCommand(CopyReportAsync, e => Status = "复制失败：" + Short(e.Message));
         InitFileCommands();
         if (CanShowMonitor)
         {
@@ -166,7 +172,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             foreach (var tab in CenterTabs) tab.IsActive = ReferenceEquals(tab, value);
             if (value is TerminalTabViewModel terminal) { activeTerminal = terminal; Raise(nameof(ActiveTerminal)); Raise(nameof(Terminal)); }
             Raise(nameof(ActiveContent));
-            Raise(nameof(ShowTerminalOverlay));
+            Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles));
             OnActiveTabChanged();
         }
     }
@@ -366,7 +372,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     /// <summary>Result of the last file action (queued, refused, failed).</summary>
     public string FileNotice { get => fileNotice; private set { if (Set(ref fileNotice, value)) Raise(nameof(HasFileNotice)); } }
     public bool HasFileNotice => FileNotice.Length > 0;
-    public bool IsConnected { get => connected; private set { if (!Set(ref connected, value)) return; Raise(nameof(ShowTerminalOverlay)); RaiseIdle(); } }
+    public bool IsConnected { get => connected; private set { if (!Set(ref connected, value)) return; Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles)); RaiseIdle(); } }
     public bool IsBusy { get => busy; private set => Set(ref busy, value); }
 
     public bool CanShowFiles => Kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp or WorkspaceKind.Ftp;
@@ -381,7 +387,9 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         get => showTerminal;
         set
         {
-            if (!Set(ref showTerminal, value && CanShowTerminal) || !showTerminal) return;
+            if (!Set(ref showTerminal, value && CanShowTerminal)) return;
+            Raise(nameof(ShowReportInFiles));
+            if (!showTerminal) return;
             // SFTP workspaces open the terminal on demand on the same authenticated transport.
             if (session?.IsConnected == true && !HasShell && openingShells.Count == 0) _ = EnsureShellAsync();
         }
@@ -403,6 +411,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     public ICommand HideMonitorCommand { get; }
     public ICommand AddTerminalCommand { get; }
     public ICommand DismissFileNoticeCommand { get; }
+    public ICommand CopyReportCommand { get; }
 
     // ---------- connecting ----------
 
@@ -492,7 +501,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
                     await AfterFtpConnectedAsync(ct);
                     break;
                 default:
-                    var connected = await connector.ConnectSshAsync(profile, ct);
+                    var connected = await connector.ConnectSshAsync(profile, ct, trace: trace);
                     if (Abandoned(connected)) return;
                     session = connected;
                     await AfterSshConnectedAsync(ct);
@@ -507,8 +516,63 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
 
     void Fail(Exception e)
     {
-        Status = "连接失败：" + Short(e.Message);
+        // A server that hangs up says more in the messages before it than the exception does.
+        string why = e is SshConnectionException && trace?.Explanation is { Length: > 0 } explained ? explained : SshErrors.Explain(e);
+        Status = "连接失败：" + Short(why, MostReason);
         if (FileRoots.Count == 0) FileMessage = Status;
+        OfferReport();
+    }
+
+    const int MostReason = 400;
+
+    /// <summary>The transport ended while its channels were being opened: that is the news then, not that each channel
+    /// "was refused". The event that says so may still be on its way.</summary>
+    bool IsLost()
+    {
+        if (session is { IsConnected: true } && trace is not { IsOver: true }) return false;
+        EndTransport(trace?.Explanation is { Length: > 0 } explained ? explained : session?.CloseReason ?? "SSH 连接已中断");
+        return true;
+    }
+
+    /// <summary>"复制连接诊断": which messages were exchanged, never what was in them.</summary>
+    public bool CanReport => trace != null && connectStarted != 0;
+    public bool ShowReport => CanReport && offerReport;
+    /// <summary>Next to the files when the terminal does not show it.</summary>
+    public bool ShowReportInFiles => ShowReport && !(ShowTerminal && ShowTerminalOverlay);
+    /// <summary>What the server shows at login. It is only of interest when something went wrong.</summary>
+    public string ServerNotice => trace?.Banner ?? "";
+    public bool HasServerNotice => ShowReport && ServerNotice.Length > 0;
+    void OfferReport()
+    {
+        offerReport = true;
+        RaiseReport();
+    }
+    void RaiseReport()
+    {
+        Raise(nameof(CanReport));
+        Raise(nameof(ShowReport));
+        Raise(nameof(ShowReportInFiles));
+        Raise(nameof(ServerNotice));
+        Raise(nameof(HasServerNotice));
+    }
+
+    internal string Report()
+    {
+        string what = Kind == WorkspaceKind.Sftp ? "文件会话" : "终端会话";
+        string[] head =
+        [
+            "Forterm Studio " + StudioPaths.Version + " 连接诊断",
+            "系统：" + RuntimeInformation.OSDescription.Trim() + " " + RuntimeInformation.ProcessArchitecture,
+            "打开方式：" + (profile == null ? "控制器唤醒" : profile.JumpChain.Count > 0 ? $"已保存连接，经 {profile.JumpChain.Count} 级跳板" : "已保存连接") + "，" + what,
+        ];
+        return trace!.Report(head, [Host, User, Title, keyPath]);
+    }
+
+    async Task CopyReportAsync()
+    {
+        if (!CanReport) return;
+        await interaction.CopyTextAsync(Report());
+        interaction.Toast(new ToastMessage(ToastKind.Info, "已复制连接诊断（没有地址、账号、票据和终端内容）"));
     }
 
     async Task AfterSshConnectedAsync(CancellationToken ct)
@@ -520,14 +584,19 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         Raise(nameof(Session));
         if (session.CloseReason is { } reason) OnTransportFault(reason);
         if (ShowTerminal && firstTerminal != null) await OpenShellAsync(firstTerminal);
+        if (disposed != 0 || IsLost()) return;
         await OpenFilesAsync(ct);
+        if (disposed != 0 || IsLost()) return;
         Status = (HasShell, sftp) switch
         {
             (true, not null) => "已连接：终端与文件复用同一 SSH 连接",
             (true, null) => "已连接：终端可用，文件通道不可用",
-            (false, not null) => Kind == WorkspaceKind.Sftp ? "已连接：SFTP 文件会话，可按需打开终端" : "已连接：文件可用，终端通道不可用",
-            _ => "已连接，但终端和文件通道都被拒绝",
+            (false, not null) when shellError.Length > 0 => "已连接：文件可用，终端没有打开：" + shellError,
+            (false, not null) => Kind == WorkspaceKind.Sftp ? "已连接：SFTP 文件会话，可按需打开终端" : "已连接：文件可用，终端没有打开",
+            _ when shellError.Length > 0 => "已登录，但终端和文件都没有打开：" + shellError,
+            _ => "已登录，但文件没有打开",
         } + environmentNotice;
+        if (!HasShell && sftp == null) OfferReport();
         sshReady = true;
     }
 
@@ -558,6 +627,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         {
             var shell = await ssh.OpenShellAsync(120, 32, lifetime.Token, settings.TerminalType, settings.Environment ?? Array.Empty<KeyValuePair<string, string>>(), flowControl: true);
             if (disposed != 0 || !Terminals.Contains(tab)) { shell.Dispose(); return; }
+            if (ReferenceEquals(tab, firstTerminal)) shellError = "";
             shell.Faulted += OnTerminalFault;
             AttachTerminal(tab, shell);
             // Sent as protocol requests only; a refusal never falls back to typing "export".
@@ -566,7 +636,12 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             if (sshReady && names.Count > 0) Status = "已打开终端" + environmentNotice;
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
-        catch (Exception e) { Status = "终端通道不可用：" + Short(e.Message); }
+        catch (Exception e)
+        {
+            string why = Short(SshErrors.Explain(e), MostReason);
+            if (ReferenceEquals(tab, firstTerminal)) shellError = why;
+            if (!transportEnded) Status = "终端通道不可用：" + why;
+        }
         finally { openingShells.Remove(tab); }
     }
 
@@ -596,7 +671,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         tab.Attach(attached, connection as IImmediateInput);
         RaiseIdle();
         Raise(nameof(HasShell));
-        Raise(nameof(ShowTerminalOverlay));
+        Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles));
         string writes = follow ? Osc7Sniffer.ShellHook : "";
         bool first = !firstAttached;
         if (first)
@@ -692,7 +767,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             await LoadTreeAsync(StartPath(sftp.HasWorkingDirectory ? sftp.Client.WorkingDirectory : "/"), ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception e) { FileMessage = "文件通道不可用：" + Short(e.Message); }
+        catch (Exception e) { if (!transportEnded) FileMessage = "文件通道不可用：" + Short(SshErrors.Explain(e), MostReason); }
     }
 
     void UseFileSource(IRemoteFileSource source, DirectoryLister list)
@@ -930,27 +1005,32 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         return shellPath is { Length: > 0 } && File.Exists(shellPath) ? shellPath : "/bin/zsh";
     }
 
-    void OnTransportFault(string message) => Dispatcher.UIThread.Post(() =>
+    void OnTransportFault(string message) => Dispatcher.UIThread.Post(() => EndTransport(message));
+
+    void EndTransport(string message)
     {
-        if (disposed != 0) return;
+        if (disposed != 0 || transportEnded) return;
+        transportEnded = true;
         IsConnected = false;
         firstTerminalLifetime.Cancel();
-        Status = "连接已断开：" + Short(message) + "（不会自动重连，请重新发起连接）";
+        Status = "连接已断开：" + Short(message, MostReason).TrimEnd('。') + (profile == null ? "（票据不会重用，请从控制器重新打开）" : "（不会自动重连，请重新发起连接）");
+        if (!HasFiles && CanShowFiles) FileMessage = Kind == WorkspaceKind.Sftp || !ShowTerminal ? Status : "连接已断开，文件没有打开。";
+        OfferReport();
         // The status line of a session that is not shown is not seen.
         if (!IsActive) interaction.Toast(new ToastMessage(ToastKind.Error, $"“{Title}”的连接已断开", "查看", () => ActivateCommand?.Execute(null)));
-    });
+    }
 
     void OnTerminalFault(string message) => Dispatcher.UIThread.Post(() =>
     {
-        if (disposed != 0) return;
+        if (disposed != 0 || transportEnded) return;
         if (Kind == WorkspaceKind.Telnet) { IsConnected = false; firstTerminalLifetime.Cancel(); }
         Status = "终端通道已关闭：" + Short(message);
     });
 
-    internal static string Short(string message)
+    internal static string Short(string message, int most = 160)
     {
         message = message.ReplaceLineEndings(" ").Trim();
-        return message.Length > 160 ? message[..160] + "…" : message;
+        return message.Length > most ? message[..most] + "…" : message;
     }
 
     public void Dispose()

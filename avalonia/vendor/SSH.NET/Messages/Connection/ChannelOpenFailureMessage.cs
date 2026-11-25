@@ -31,6 +31,12 @@
             }
         }
 
+        // Forterm: the reason, for the log.
+        public override string ToString()
+        {
+            return base.ToString() + " " + ReasonCode.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + Description;
+        }
+
         /// <summary>
         /// Gets failure reason code.
         /// </summary>

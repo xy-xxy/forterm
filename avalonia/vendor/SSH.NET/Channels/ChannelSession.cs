@@ -18,6 +18,10 @@ namespace Renci.SshNet.Channels
         /// </summary>
         private int _failedOpenAttempts;
 
+        // Forterm: the server's answer to the last attempt.
+        private uint _openFailureReason;
+        private string _openFailureDescription = string.Empty;
+
         /// <summary>
         /// Holds a value indicating whether the session semaphore has been obtained by the current
         /// channel.
@@ -83,7 +87,8 @@ namespace Renci.SshNet.Channels
 
             if (!IsOpen)
             {
-                throw new SshException(string.Format(CultureInfo.CurrentCulture, "Failed to open a channel after {0} attempts.", _failedOpenAttempts));
+                // Forterm: with the server's reason.
+                throw new SshChannelOpenException(string.Format(CultureInfo.CurrentCulture, "Failed to open a channel after {0} attempts.", _failedOpenAttempts), _openFailureReason, _openFailureDescription);
             }
         }
 
@@ -109,6 +114,8 @@ namespace Renci.SshNet.Channels
         protected override void OnOpenFailure(uint reasonCode, string description, string language)
         {
             _failedOpenAttempts++;
+            _openFailureReason = reasonCode;
+            _openFailureDescription = description ?? string.Empty;
             ReleaseSemaphore();
             _ = _channelOpenResponseWaitHandle.Set();
         }

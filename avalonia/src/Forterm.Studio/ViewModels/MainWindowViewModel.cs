@@ -91,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 }
             }
             yield return Do("界面", current.ShowTerminal ? "收起终端栏" : "显示终端栏", current.ToggleTerminalCommand);
+            if (current.CanReport) yield return Do("会话", "复制连接诊断", current.CopyReportCommand, detail: "协议消息的名称与时间，没有地址、账号和内容");
             if (current.CanShowMonitor) yield return Do("界面", current.ShowMonitor ? "收起监控栏" : "显示监控栏", current.ToggleMonitorCommand);
         }
         yield return Do("界面", "连接库", ShowHomeCommand, Shortcuts.Home.Keys);

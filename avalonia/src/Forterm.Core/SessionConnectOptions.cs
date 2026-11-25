@@ -20,6 +20,12 @@ public sealed record SessionConnectOptions
     /// <summary>Moved to the front of the client's offer ("" = default order); see <see cref="SshAlgorithms"/>.</summary>
     public string PreferredKeyExchange { get; init; } = "";
     public string PreferredCipher { get; init; } = "";
+    /// <summary>Channels are asked for as OpenSSH and other common clients do: once, where the library repeats a refused
+    /// request up to ten times at once; with packets of 32 KiB, where it says 64 KiB; and a terminal with a list of modes,
+    /// where it sends an empty one.</summary>
+    public bool CommonChannels { get; init; }
+    /// <summary>Notes which messages are exchanged with the server (see <see cref="SshTrace"/>).</summary>
+    public SshTrace? Trace { get; init; }
     public void Validate()
     {
         if (KeepAliveSeconds is < 5 or > 600) throw new ArgumentOutOfRangeException(nameof(KeepAliveSeconds), "心跳间隔必须5–600秒");

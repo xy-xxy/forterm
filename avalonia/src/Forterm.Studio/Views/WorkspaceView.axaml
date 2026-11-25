@@ -12,13 +12,11 @@
         <Button DockPanel.Dock="Right" Classes="status-chip" IsVisible="{Binding ShowsIdle}" Command="{Binding ToggleIdleCommand}" ToolTip.Tip="{Binding IdleTip}" AutomationProperties.Name="空闲保活">
           <TextBlock Text="{Binding IdleText}" FontSize="11"/>
         </Button>
-      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-        <Border Background="{DynamicResource St.AccentSoft}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+        <Border DockPanel.Dock="Left" Background="{DynamicResource St.AccentSoft}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
           <TextBlock Text="{Binding ProtocolLabel}" FontSize="11" Foreground="{DynamicResource St.Accent}" VerticalAlignment="Center"/>
         </Border>
-        <TextBlock Text="{Binding Endpoint}" FontSize="11.5" Classes="dim" VerticalAlignment="Center"/>
-        <TextBlock Name="StatusText" Text="{Binding Status}" FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-      </StackPanel>
+        <TextBlock DockPanel.Dock="Left" Text="{Binding Endpoint}" FontSize="11.5" Classes="dim" VerticalAlignment="Center"/>
+        <TextBlock Name="StatusText" Text="{Binding Status}" ToolTip.Tip="{Binding Status}" FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
       </DockPanel>
     </Border>
 
@@ -252,6 +250,13 @@
             <StackPanel IsVisible="{Binding HasFileMessage}" Margin="14,8" Spacing="10">
               <TextBlock Text="{Binding FileMessage}" TextWrapping="Wrap" Classes="dim"/>
               <Button Classes="secondary" Content="输入绝对目录" Command="{Binding EnterDirectoryCommand}" IsVisible="{Binding NeedsDirectory}" HorizontalAlignment="Left"/>
+              <StackPanel IsVisible="{Binding ShowReportInFiles}" Spacing="10">
+                <StackPanel IsVisible="{Binding HasServerNotice}" Spacing="4">
+                  <TextBlock Classes="dim" FontSize="11.5" Text="服务器的登录提示"/>
+                  <ScrollViewer MaxHeight="160"><SelectableTextBlock Text="{Binding ServerNotice}" TextWrapping="Wrap"/></ScrollViewer>
+                </StackPanel>
+                <Button Classes="secondary" Content="复制连接诊断" Command="{Binding CopyReportCommand}" HorizontalAlignment="Left" ToolTip.Tip="双方交换了哪些协议消息、断在哪一步；没有地址、账号、票据和终端内容"/>
+              </StackPanel>
             </StackPanel>
           </Panel>
         </DockPanel>
@@ -386,6 +391,11 @@
               <c:BusyRing Width="30" Height="30" Brush="{DynamicResource St.Accent}" HorizontalAlignment="Center" IsVisible="{Binding IsBusy}" IsActive="{Binding IsBusy}"/>
               <c:StrokeIcon Data="{StaticResource Icon.Terminal}" Width="28" Height="28" HorizontalAlignment="Center" IsVisible="{Binding !IsBusy}"/>
               <TextBlock Text="{Binding Status}" TextWrapping="Wrap" TextAlignment="Center" Classes="dim"/>
+              <StackPanel IsVisible="{Binding HasServerNotice}" Spacing="4" Margin="0,8,0,0">
+                <TextBlock Classes="dim" FontSize="11.5" Text="服务器的登录提示" HorizontalAlignment="Center"/>
+                <ScrollViewer MaxHeight="160"><SelectableTextBlock Text="{Binding ServerNotice}" TextWrapping="Wrap" TextAlignment="Center"/></ScrollViewer>
+              </StackPanel>
+              <Button Name="CopyReport" Classes="secondary" Content="复制连接诊断" Command="{Binding CopyReportCommand}" IsVisible="{Binding ShowReport}" HorizontalAlignment="Center" Margin="0,8,0,0" ToolTip.Tip="双方交换了哪些协议消息、断在哪一步；没有地址、账号、票据和终端内容"/>
             </StackPanel>
           </Border>
         </Panel>

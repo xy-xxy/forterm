@@ -2227,6 +2227,12 @@ namespace Renci.SshNet
             get { return _messageListenerCompleted; }
         }
 
+        // Forterm: see ConnectionInfo.ChannelPacketSize.
+        private uint ChannelPacketSize
+        {
+            get { return ConnectionInfo.ChannelPacketSize > 0 ? ConnectionInfo.ChannelPacketSize : LocalChannelDataPacketSize; }
+        }
+
         /// <summary>
         /// Create a new SSH session channel.
         /// </summary>
@@ -2235,7 +2241,7 @@ namespace Renci.SshNet
         /// </returns>
         IChannelSession ISession.CreateChannelSession()
         {
-            return new ChannelSession(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
+            return new ChannelSession(this, NextChannelNumber, InitialLocalWindowSize, ChannelPacketSize);
         }
 
         /// <summary>
@@ -2246,7 +2252,7 @@ namespace Renci.SshNet
         /// </returns>
         IChannelDirectTcpip ISession.CreateChannelDirectTcpip()
         {
-            return new ChannelDirectTcpip(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
+            return new ChannelDirectTcpip(this, NextChannelNumber, InitialLocalWindowSize, ChannelPacketSize);
         }
 
         /// <summary>

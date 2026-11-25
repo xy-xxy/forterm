@@ -43,6 +43,7 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
     public static SessionConnectOptions OptionsFor(StudioProfile p) => new()
     {
         MaxChannels = MaxChannels,
+        CommonChannels = true,
         KeepAliveEnabled = p.HeartbeatMs > 0,
         KeepAliveSeconds = p.HeartbeatMs > 0 ? Math.Clamp(p.HeartbeatMs / 1000, 5, 600) : 15,
         ConnectTimeoutSeconds = p.TimeoutMs > 0 ? Math.Clamp(p.TimeoutMs / 1000, 5, 300) : 45,
@@ -51,7 +52,7 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
         PreferredKeyExchange = p.IsSsh ? p.KeyExchange : "",
     };
 
-    public async Task<SharedSshSession> ConnectSshAsync(StudioProfile target, CancellationToken ct, OneTimeSecrets? targetSecrets = null, bool persistHostKeys = true)
+    public async Task<SharedSshSession> ConnectSshAsync(StudioProfile target, CancellationToken ct, OneTimeSecrets? targetSecrets = null, bool persistHostKeys = true, SshTrace? trace = null)
     {
         if (!target.IsSsh) throw new IOException("不是 SSH 连接");
         var chain = ResolveChain(target);
@@ -64,7 +65,7 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
             {
                 var hop = chain[i];
                 bool isTarget = i == chain.Count - 1;
-                var options = OptionsFor(hop) with { Jump = previous, Proxy = i == 0 ? firstHopProxy : null };
+                var options = OptionsFor(hop) with { Jump = previous, Proxy = i == 0 ? firstHopProxy : null, Trace = isTarget ? trace : null };
                 var next = await ConnectOneAsync(hop, options, isTarget ? targetSecrets : null, !isTarget, persistHostKeys, ct);
                 // The next hop holds its own lease on the jump transport; drop ours.
                 previous?.Dispose();

@@ -45,6 +45,12 @@
             }
         }
 
+        // Forterm: which request it is, for the log (a name, never the data of the request).
+        public override string ToString()
+        {
+            return base.ToString() + " " + _requestName;
+        }
+
         /// <summary>
         /// Gets channel request data.
         /// </summary>

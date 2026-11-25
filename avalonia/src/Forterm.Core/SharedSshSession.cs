@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 
 namespace Forterm.Core;
 
@@ -29,6 +30,8 @@ public sealed partial class SharedSshSession : IDisposable
             : new ConnectionInfo(host, port, username, authentication.Methods.ToArray());
         info.Timeout = TimeSpan.FromSeconds(options.ConnectTimeoutSeconds); info.MaxSessions = options.MaxChannels;
         SshAlgorithms.Apply(info, options);
+        if (options.CommonChannels) { info.RetryAttempts = 1; info.ChannelPacketSize = 32 * 1024; }
+        if (options.Trace != null) info.LoggerFactory = options.Trace;
         var client = new SshClient(info) { KeepAliveInterval = Timeout.InfiniteTimeSpan };
         string? trustedFingerprint = null;
         client.HostKeyReceived += (_, e) =>
@@ -38,11 +41,11 @@ public sealed partial class SharedSshSession : IDisposable
             e.CanTrust = confirmFingerprint(fp, authToken).GetAwaiter().GetResult();
             if (e.CanTrust) trustedFingerprint = fp;
         };
-        try { await client.ConnectAsync(authToken).ConfigureAwait(false); return new(client, options, relay, jumpLease); }
+        try { try { await client.ConnectAsync(authToken).ConfigureAwait(false); } finally { options.Trace?.OnConnection(info); } return new(client, options, relay, jumpLease); }
         catch (Exception error) { client.Dispose(); relay?.Dispose(); jumpLease?.Dispose(); if (relay?.Failure != null) throw new IOException("跳板转发未成功；原跳板会话保持：" + relay.Failure, error); throw; }
         finally { timeout.Cancel(); }
     }
-    SharedSshSession(SshClient client, SessionConnectOptions options, IDisposable? upstream = null, IDisposable? upstreamLease = null) { this.client = client; this.options = options; this.upstream = upstream; this.upstreamLease = upstreamLease; client.ErrorOccurred += (_, _) => ThreadPool.QueueUserWorkItem(_ => FailTransport("SSH连接已中断；已停止此连接，不自动重用凭据。")); if (options.KeepAliveEnabled) _ = KeepAlive(); }
+    SharedSshSession(SshClient client, SessionConnectOptions options, IDisposable? upstream = null, IDisposable? upstreamLease = null) { this.client = client; this.options = options; this.upstream = upstream; this.upstreamLease = upstreamLease; client.ErrorOccurred += (_, _) => ThreadPool.QueueUserWorkItem(_ => FailTransport(options.Trace?.Explanation is { Length: > 0 } explained ? explained : "SSH连接已中断；已停止此连接，不自动重用凭据。")); if (options.KeepAliveEnabled) _ = KeepAlive(); }
     async Task KeepAlive()
     {
         try { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.KeepAliveSeconds)); while (await timer.WaitForNextTickAsync(transportClosed.Token)) { await client.ProbeTransportAsync(TimeSpan.FromSeconds(options.KeepAliveSeconds), 3, transportClosed.Token); } }
@@ -82,7 +85,7 @@ public sealed partial class SharedSshSession : IDisposable
         try
         {
             IReadOnlyList<string> rejected = Array.Empty<string>();
-            shell = await Task.Run(() => { var created = client.CreateShellStream(term, (uint)cols, (uint)rows, 0, 0, 65536, variables, out var refused, flowControl ? SshPtyConnection.FlowWindow : 0); rejected = refused; return created; }, CancellationToken.None).ConfigureAwait(false);
+            shell = await Task.Run(() => { var created = client.CreateShellStream(term, (uint)cols, (uint)rows, 0, 0, 65536, variables, out var refused, flowControl ? SshPtyConnection.FlowWindow : 0, options.CommonChannels ? CommonModes : null); rejected = refused; return created; }, CancellationToken.None).ConfigureAwait(false);
             if (ct.IsCancellationRequested) { shell.Dispose(); ct.ThrowIfCancellationRequested(); }
             return new SshPtyConnection(shell, lease, flowControl) { RejectedEnvironment = rejected };
         }
@@ -101,6 +104,8 @@ public sealed partial class SharedSshSession : IDisposable
         }
         catch { shell?.Dispose(); lease.Dispose(); throw; }
     }
+    /// <summary>Only the speeds, as clients without special wishes send them; everything else is the server's own default.</summary>
+    static readonly IDictionary<TerminalModes, uint> CommonModes = new Dictionary<TerminalModes, uint> { [TerminalModes.TTY_OP_ISPEED] = 38400, [TerminalModes.TTY_OP_OSPEED] = 38400 };
     /// <summary>TERM sent in pty-req: letters, digits and "-._+" only, at most 64 characters.</summary>
     public static string ValidTerminalType(string? value)
     {

@@ -110,7 +110,7 @@ namespace Renci.SshNet
         // rejected and does not fail the shell. A window above 0 turns on flow control: the server
         // may be at most that far ahead of the reader, who reports what it took to ReleaseWindow.
         internal ShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
-            IReadOnlyList<KeyValuePair<string, string>> environment, List<string> rejected, uint window)
+            IReadOnlyList<KeyValuePair<string, string>> environment, List<string> rejected, uint window, IDictionary<TerminalModes, uint>? modes = null)
                : this(session, bufferSize, noTerminal: false)
         {
             try
@@ -122,7 +122,7 @@ namespace Renci.SshNet
 
                 _channel.Open();
 
-                if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, null!))
+                if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, modes!))
                 {
                     throw new SshException("The pseudo-terminal request was not accepted by the server. Consult the server log for more information.");
                 }

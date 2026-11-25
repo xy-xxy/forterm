@@ -195,6 +195,119 @@
              LocalWindowSize -= (uint)count;
  
              // Adjust window if window size is too low
+--- upstream/Channels/ChannelSession.cs
++++ forterm/Channels/ChannelSession.cs
+@@ -18,6 +18,10 @@
+         /// </summary>
+         private int _failedOpenAttempts;
+ 
++        // Forterm: the server's answer to the last attempt.
++        private uint _openFailureReason;
++        private string _openFailureDescription = string.Empty;
++
+         /// <summary>
+         /// Holds a value indicating whether the session semaphore has been obtained by the current
+         /// channel.
+@@ -83,7 +87,8 @@
+ 
+             if (!IsOpen)
+             {
+-                throw new SshException(string.Format(CultureInfo.CurrentCulture, "Failed to open a channel after {0} attempts.", _failedOpenAttempts));
++                // Forterm: with the server's reason.
++                throw new SshChannelOpenException(string.Format(CultureInfo.CurrentCulture, "Failed to open a channel after {0} attempts.", _failedOpenAttempts), _openFailureReason, _openFailureDescription);
+             }
+         }
+ 
+@@ -109,6 +114,8 @@
+         protected override void OnOpenFailure(uint reasonCode, string description, string language)
+         {
+             _failedOpenAttempts++;
++            _openFailureReason = reasonCode;
++            _openFailureDescription = description ?? string.Empty;
+             ReleaseSemaphore();
+             _ = _channelOpenResponseWaitHandle.Set();
+         }
+--- /dev/null
++++ forterm/Common/SshChannelOpenException.Forterm.cs
+@@ -0,0 +1,20 @@
++#nullable enable
++namespace Renci.SshNet.Common
++{
++    // Forterm: what the server said when it refused a session channel (RFC 4254 5.1). Upstream throws an SshException
++    // with the same message and keeps neither the reason nor the description.
++    public sealed class SshChannelOpenException : SshException
++    {
++        public SshChannelOpenException(string message, uint reasonCode, string description)
++            : base(message)
++        {
++            ReasonCode = reasonCode;
++            Description = description;
++        }
++
++        public uint ReasonCode { get; }
++
++        // Text from the server.
++        public string Description { get; }
++    }
++}
+--- upstream/ConnectionInfo.cs
++++ forterm/ConnectionInfo.cs
+@@ -515,5 +515,9 @@
+         /// The logger factory for this connection. If <see langword="null"/> then <see cref="SshNetLoggingConfiguration.LoggerFactory"/> is used.
+         /// </value>
+         public ILoggerFactory? LoggerFactory { get; set; }
++
++        // Forterm: the largest packet the server is told it may send on a channel; 0 is the library's own (64 KiB).
++        // OpenSSH says 32 KiB, PuTTY 16 KiB.
++        public uint ChannelPacketSize { get; set; }
+     }
+ }
+--- upstream/Messages/Authentication/BannerMessage.cs
++++ forterm/Messages/Authentication/BannerMessage.cs
+@@ -34,6 +34,13 @@
+             get { return Utf8.GetString(_message, 0, _message.Length); }
+         }
+ 
++        // Forterm: with the text, for the log. The event of ConnectionInfo misses a banner that arrives before the login
++        // methods listen for it.
++        public override string ToString()
++        {
++            return base.ToString() + " " + Message;
++        }
++
+         /// <summary>
+         /// Gets banner language.
+         /// </summary>
+--- upstream/Messages/Connection/ChannelOpenFailureMessage.cs
++++ forterm/Messages/Connection/ChannelOpenFailureMessage.cs
+@@ -31,6 +31,12 @@
+             }
+         }
+ 
++        // Forterm: the reason, for the log.
++        public override string ToString()
++        {
++            return base.ToString() + " " + ReasonCode.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + Description;
++        }
++
+         /// <summary>
+         /// Gets failure reason code.
+         /// </summary>
+--- upstream/Messages/Connection/ChannelRequest/ChannelRequestMessage.cs
++++ forterm/Messages/Connection/ChannelRequest/ChannelRequestMessage.cs
+@@ -45,6 +45,12 @@
+             }
+         }
+ 
++        // Forterm: which request it is, for the log (a name, never the data of the request).
++        public override string ToString()
++        {
++            return base.ToString() + " " + _requestName;
++        }
++
+         /// <summary>
+         /// Gets channel request data.
+         /// </summary>
 --- upstream/Session.cs
 +++ forterm/Session.cs
 @@ -70,7 +70,7 @@
@@ -206,6 +319,37 @@
  
          /// <summary>
          /// Holds the factory to use for creating new services.
+@@ -2225,6 +2225,12 @@
+         WaitHandle ISession.MessageListenerCompleted
+         {
+             get { return _messageListenerCompleted; }
++        }
++
++        // Forterm: see ConnectionInfo.ChannelPacketSize.
++        private uint ChannelPacketSize
++        {
++            get { return ConnectionInfo.ChannelPacketSize > 0 ? ConnectionInfo.ChannelPacketSize : LocalChannelDataPacketSize; }
+         }
+ 
+         /// <summary>
+@@ -2235,7 +2241,7 @@
+         /// </returns>
+         IChannelSession ISession.CreateChannelSession()
+         {
+-            return new ChannelSession(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
++            return new ChannelSession(this, NextChannelNumber, InitialLocalWindowSize, ChannelPacketSize);
+         }
+ 
+         /// <summary>
+@@ -2246,7 +2252,7 @@
+         /// </returns>
+         IChannelDirectTcpip ISession.CreateChannelDirectTcpip()
+         {
+-            return new ChannelDirectTcpip(this, NextChannelNumber, InitialLocalWindowSize, LocalChannelDataPacketSize);
++            return new ChannelDirectTcpip(this, NextChannelNumber, InitialLocalWindowSize, ChannelPacketSize);
+         }
+ 
+         /// <summary>
 --- upstream/Sftp/ISftpSession.cs
 +++ forterm/Sftp/ISftpSession.cs
 @@ -21,6 +21,7 @@
@@ -432,7 +576,7 @@
 +        // rejected and does not fail the shell. A window above 0 turns on flow control: the server
 +        // may be at most that far ahead of the reader, who reports what it took to ReleaseWindow.
 +        internal ShellStream(ISession session, string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
-+            IReadOnlyList<KeyValuePair<string, string>> environment, List<string> rejected, uint window)
++            IReadOnlyList<KeyValuePair<string, string>> environment, List<string> rejected, uint window, IDictionary<TerminalModes, uint>? modes = null)
 +               : this(session, bufferSize, noTerminal: false)
 +        {
 +            try
@@ -444,7 +588,7 @@
 +
 +                _channel.Open();
 +
-+                if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, null!))
++                if (!_channel.SendPseudoTerminalRequest(terminalName, columns, rows, width, height, modes!))
 +                {
 +                    throw new SshException("The pseudo-terminal request was not accepted by the server. Consult the server log for more information.");
 +                }
@@ -560,11 +704,11 @@
 +        // server refused are returned; the shell still opens. A window above 0 turns on flow control
 +        // (see ShellStream.ReleaseWindow).
 +        public ShellStream CreateShellStream(string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
-+            IReadOnlyList<KeyValuePair<string, string>> environment, out IReadOnlyList<string> rejected, uint window = 0)
++            IReadOnlyList<KeyValuePair<string, string>> environment, out IReadOnlyList<string> rejected, uint window = 0, IDictionary<TerminalModes, uint>? modes = null)
 +        {
 +            EnsureSessionIsOpen();
 +            var refused = new List<string>();
-+            var stream = new ShellStream(Session!, terminalName, columns, rows, width, height, bufferSize, environment, refused, window);
++            var stream = new ShellStream(Session!, terminalName, columns, rows, width, height, bufferSize, environment, refused, window, modes);
 +            rejected = refused;
 +            return stream;
 +        }

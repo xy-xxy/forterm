@@ -338,11 +338,11 @@ namespace Renci.SshNet
         // server refused are returned; the shell still opens. A window above 0 turns on flow control
         // (see ShellStream.ReleaseWindow).
         public ShellStream CreateShellStream(string terminalName, uint columns, uint rows, uint width, uint height, int bufferSize,
-            IReadOnlyList<KeyValuePair<string, string>> environment, out IReadOnlyList<string> rejected, uint window = 0)
+            IReadOnlyList<KeyValuePair<string, string>> environment, out IReadOnlyList<string> rejected, uint window = 0, IDictionary<TerminalModes, uint>? modes = null)
         {
             EnsureSessionIsOpen();
             var refused = new List<string>();
-            var stream = new ShellStream(Session!, terminalName, columns, rows, width, height, bufferSize, environment, refused, window);
+            var stream = new ShellStream(Session!, terminalName, columns, rows, width, height, bufferSize, environment, refused, window, modes);
             rejected = refused;
             return stream;
         }
