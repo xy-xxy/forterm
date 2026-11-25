@@ -466,7 +466,7 @@ public sealed class CloseGuardTests
             Click(window, at);
             Click(window, at);
             // The second click of a double click, however slow the machine was in between.
-            CloseGuard.ForgetForTest();
+            CloseGuard.EndPauseForTest();
             Click(window, at);
             Assert.True(w.ShowTerminal);
             Assert.True(w.HasShell);

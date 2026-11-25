@@ -53,16 +53,21 @@ public sealed class TransferItemViewModel : ObservableObject
 {
     readonly TransferMeter meter = new();
     TransferSnapshot snapshot;
+    bool cancelAsked;
 
     public TransferItemViewModel(TransferSnapshot snapshot, TransferKind kind, Action<Guid> cancel)
     {
         this.snapshot = snapshot;
         Kind = kind;
-        CancelCommand = new RelayCommand(() => cancel(Id));
+        CancelCommand = new RelayCommand(() => { cancel(Id); cancelAsked = true; Measure(Now?.Invoke() ?? TimeSpan.Zero); });
     }
+    /// <summary>The list's clock; set by the list.</summary>
+    internal Func<TimeSpan>? Now { get; set; }
 
-    /// <summary>Bytes are on their way (not queued, not being checked or committed).</summary>
-    public bool IsMoving => snapshot is { State: TransferState.Running, Unit: "B" } && Kind != TransferKind.Operation;
+    /// <summary>Bytes are on their way (not queued, not being checked or committed, not being cancelled: what is cleaned up
+    /// then is no speed).</summary>
+    public bool IsMoving => snapshot is { State: TransferState.Running, Unit: "B" } && Kind != TransferKind.Operation && !IsCancelling;
+    bool IsCancelling => cancelAsked || snapshot.Message.StartsWith("正在取消", StringComparison.Ordinal);
     public double? Speed => IsMoving ? meter.PerSecond : null;
     /// <summary>"3.2 MB/s" while it runs, the average when it has ended.</summary>
     public string SpeedText => IsMoving ? meter.PerSecond is { } now ? Bytes((long)now) + "/s" : ""
@@ -142,7 +147,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     readonly long began;
     readonly DispatcherTimer clock = new() { Interval = TimeSpan.FromMilliseconds(500) };
     string filter = "all";
-    bool refreshQueued;
+    bool refreshQueued, disposed;
 
     public TransferListViewModel(TransferQueue queue, TimeProvider? time = null)
     {
@@ -175,6 +180,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
 
     internal void Tick()
     {
+        if (disposed) { clock.Stop(); return; }
         var now = Now;
         foreach (var item in items.Values) if (item.IsMoving) item.Measure(now);
         RaiseSpeeds();
@@ -182,7 +188,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     }
     void Run()
     {
-        bool moving = items.Values.Any(i => i.IsMoving);
+        bool moving = !disposed && items.Values.Any(i => i.IsMoving);
         if (moving == clock.IsEnabled) return;
         if (moving) clock.Start(); else clock.Stop();
     }
@@ -202,7 +208,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     void OnChanged()
     {
         lock (kinds) { if (refreshQueued) return; refreshQueued = true; }
-        Dispatcher.UIThread.Post(() => { lock (kinds) refreshQueued = false; Refresh(); });
+        Dispatcher.UIThread.Post(() => { lock (kinds) refreshQueued = false; if (!disposed) Refresh(); });
     }
 
     readonly HashSet<Guid> batch = new();
@@ -220,6 +226,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
 
     public void Refresh()
     {
+        if (disposed) return;
         var snapshot = queue.Snapshot();
         var present = snapshot.Select(s => s.Id).ToHashSet();
         foreach (var gone in items.Keys.Where(id => !present.Contains(id)).ToList()) items.Remove(gone);
@@ -230,7 +237,7 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
             {
                 TransferKind kind;
                 lock (kinds) kind = kinds.GetValueOrDefault(s.Id, TransferKind.Operation);
-                items[s.Id] = new TransferItemViewModel(s, kind, queue.Cancel);
+                items[s.Id] = new TransferItemViewModel(s, kind, queue.Cancel) { Now = () => Now };
                 items[s.Id].Measure(Now);
             }
         }
@@ -243,9 +250,11 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
         var wanted = items.Values.Where(i => filter switch { "up" => i.IsUpload, "down" => i.IsDownload, _ => true })
             .OrderByDescending(i => i.IsActive).ToList();
         // Rows that stay are left alone: several times a second is too often to build them again.
-        for (int i = Visible.Count - 1; i >= 0; i--) if (!wanted.Contains(Visible[i])) Visible.RemoveAt(i);
+        var keep = wanted.ToHashSet();
+        for (int i = Visible.Count - 1; i >= 0; i--) if (!keep.Contains(Visible[i])) Visible.RemoveAt(i);
         for (int i = 0; i < wanted.Count; i++)
         {
+            if (i < Visible.Count && ReferenceEquals(Visible[i], wanted[i])) continue;
             int at = Visible.IndexOf(wanted[i]);
             if (at < 0) Visible.Insert(i, wanted[i]);
             else if (at != i) Visible.Move(at, i);
@@ -255,5 +264,5 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
         Run();
     }
 
-    public void Dispose() { queue.Changed -= OnChanged; clock.Stop(); }
+    public void Dispose() { disposed = true; queue.Changed -= OnChanged; clock.Stop(); }
 }

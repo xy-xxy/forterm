@@ -38,6 +38,10 @@ public sealed partial class WorkspaceView : UserControl
         AvaloniaXamlLoader.Load(this);
         columns = this.FindControl<Grid>("Columns")!;
         files = this.FindControl<StudioPane>("FilesPane")!;
+        // The header holds the title, its ×, the link button and the column's own two buttons; at the narrowest the title
+        // gives way, so that none of them is pushed under the next column.
+        var filesTitle = this.FindControl<TextBlock>("FilesTitleText")!;
+        files.SizeChanged += (_, e) => filesTitle.MaxWidth = Math.Clamp(e.NewSize.Width - 131, 30, 96);
         terminal = this.FindControl<StudioPane>("TerminalPane")!;
         monitor = this.FindControl<StudioPane>("MonitorPane")!;
         leftSplitter = this.FindControl<Thumb>("LeftSplitter")!;
@@ -111,7 +115,7 @@ public sealed partial class WorkspaceView : UserControl
             if (!e.GetCurrentPoint(terminal).Properties.IsMiddleButtonPressed) return;
             if ((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("chip-tab"))?.DataContext is not CenterTabViewModel tab) return;
             e.Handled = true;
-            if (tab.CloseCommand?.CanExecute(null) == true) tab.CloseCommand.Execute(null);
+            if (tab.CloseCommand?.CanExecute(null) == true && !CloseGuard.Blocks(e)) tab.CloseCommand.Execute(null);
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 

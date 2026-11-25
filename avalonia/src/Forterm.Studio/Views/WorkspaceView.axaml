@@ -46,7 +46,7 @@
           <Border Classes="pane-chip" ToolTip.Tip="{Binding LinkTip}">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <c:StrokeIcon Data="{StaticResource Icon.Chain}" Width="11" Height="11" Thickness="2" Brush="{DynamicResource St.Accent}" IsVisible="{Binding ShowsLinkedFiles}" VerticalAlignment="Center"/>
-              <TextBlock Classes="chip-text" Text="{Binding FilesTitle}" MaxWidth="96" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Name="FilesTitleText" Classes="chip-text" Text="{Binding FilesTitle}" MaxWidth="96" TextTrimming="CharacterEllipsis"/>
               <Button Classes="chip-close collapse" Command="{Binding HideFilesCommand}" ToolTip.Tip="收起此栏（会话不断开）" AutomationProperties.Name="收起文件栏">
                 <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
               </Button>

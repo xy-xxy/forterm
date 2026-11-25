@@ -45,15 +45,25 @@ public sealed partial class SharedSshSession : IDisposable
         catch (Exception error) { client.Dispose(); relay?.Dispose(); jumpLease?.Dispose(); if (relay?.Failure != null) throw new IOException("跳板转发未成功；原跳板会话保持：" + relay.Failure, error); throw; }
         finally { timeout.Cancel(); }
     }
-    SharedSshSession(SshClient client, SessionConnectOptions options, IDisposable? upstream = null, IDisposable? upstreamLease = null) { this.client = client; this.options = options; this.upstream = upstream; this.upstreamLease = upstreamLease; client.ErrorOccurred += (_, _) => ThreadPool.QueueUserWorkItem(_ => FailTransport(options.Trace?.Explanation is { Length: > 0 } explained ? explained : "SSH连接已中断；已停止此连接，不自动重用凭据。")); if (options.KeepAliveEnabled) _ = KeepAlive(); }
+    SharedSshSession(SshClient client, SessionConnectOptions options, IDisposable? upstream = null, IDisposable? upstreamLease = null)
+    {
+        this.client = client; this.options = options; this.upstream = upstream; this.upstreamLease = upstreamLease;
+        client.ErrorOccurred += (_, _) => ThreadPool.QueueUserWorkItem(_ => FailTransport(Explained("SSH连接已中断；已停止此连接，不自动重用凭据。")));
+        // A server that says goodbye (SSH_MSG_DISCONNECT) is no error to the library: only the trace hears it. Not from the
+        // receive thread, which disposing the client waits for.
+        if (options.Trace is { } trace) { trace.PeerEnded += OnPeerEnded; if (trace.EndedByPeer) OnPeerEnded(); }
+        if (options.KeepAliveEnabled) _ = KeepAlive();
+    }
+    void OnPeerEnded() => ThreadPool.QueueUserWorkItem(_ => FailTransport(Explained("SSH连接已中断；已停止此连接，不自动重用凭据。")));
+    string Explained(string otherwise) => options.Trace?.Explanation is { Length: > 0 } explained ? explained : otherwise;
     async Task KeepAlive()
     {
         try { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.KeepAliveSeconds)); while (await timer.WaitForNextTickAsync(transportClosed.Token)) { await client.ProbeTransportAsync(TimeSpan.FromSeconds(options.KeepAliveSeconds), 3, transportClosed.Token); } }
         catch (OperationCanceledException) when (transportClosed.IsCancellationRequested) { }
-        catch (Exception) { if (!transportClosed.IsCancellationRequested) FailTransport("SSH协议保活连续三个应答窗口无响应或连接不可用；已停止此连接，不自动重用凭据。"); }
+        catch (Exception) { if (!transportClosed.IsCancellationRequested) FailTransport(Explained("SSH协议保活连续三个应答窗口无响应或连接不可用；已停止此连接，不自动重用凭据。")); }
     }
     void FailTransport(string reason) { if (Volatile.Read(ref transportDisposed) != 0) return; if (Interlocked.CompareExchange(ref failure, reason, null) == null) { try { Faulted?.Invoke(reason); } finally { StopTransport(); } } }
-    void StopTransport() { if (Interlocked.Exchange(ref transportDisposed, 1) != 0) return; try { transportClosed.Cancel(); } catch { } try { client.Dispose(); } catch { } finally { try { upstream?.Dispose(); } finally { upstreamLease?.Dispose(); } } }
+    void StopTransport() { if (Interlocked.Exchange(ref transportDisposed, 1) != 0) return; if (options.Trace is { } trace) trace.PeerEnded -= OnPeerEnded; try { transportClosed.Cancel(); } catch { } try { client.Dispose(); } catch { } finally { try { upstream?.Dispose(); } finally { upstreamLease?.Dispose(); } } }
     public IDisposable Retain()
     {
         lock (gate) { ObjectDisposedException.ThrowIf(closing || !IsConnected, this); references++; return new Lease(this); }

@@ -56,6 +56,7 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
     {
         if (!target.IsSsh) throw new IOException("不是 SSH 连接");
         var chain = ResolveChain(target);
+        foreach (var hop in chain) { trace?.Conceal(hop.Host); trace?.Conceal(hop.User); trace?.Conceal(hop.Name); }
         // The proxy configured on the target applies to the first hop ("代理优先于跳板机链路").
         var firstHopProxy = OptionsFor(target).Proxy ?? OptionsFor(chain[0]).Proxy;
         SharedSshSession? previous = null;
@@ -92,6 +93,7 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
                 password = await AskOnce(who + "：未保存密码，输入内容仅用于本次连接。", "登录密码", ct);
             Task<bool> Verify(string fingerprint, CancellationToken token) =>
                 knownHosts.VerifyAsync(p.Host, p.Port, fingerprint, persistHostKeys, interaction.ConfirmHostKeyAsync, token);
+            options.Trace?.ConcealSecret(password);
             Task<SharedSshSession> Open() => SharedSshSession.ConnectAsync(p.Host, p.Port, p.User, password, Verify, ct,
                 temporary: false, challenge: interaction.AskCredentialsAsync, authMode: p.AuthMode, keyPath: p.KeyPath, keyPassphrase: phrase, options: options);
             try { return await Open(); }

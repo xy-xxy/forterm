@@ -429,6 +429,11 @@ for line in sys.stdin:
    except Exception:pass
   threading.Thread(target=flood,daemon=True).start();print(json.dumps({'floodStarted':True}),flush=True)
  if line.strip()=='release-shell':release_shell.set();print(json.dumps({'released':True}),flush=True)
+ if line.strip()=='bye':
+  # SSH_MSG_DISCONNECT 11 (by application) with a text, as a bastion that ends a session does, then the socket.
+  for t in transports:
+   bye=paramiko.Message();bye.add_byte(bytes([1]));bye.add_int(11);bye.add_string(odd_text or 'session closed by admin');bye.add_string('en');t._send_message(bye);hang_up(t)
+  print(json.dumps({'bye':True}),flush=True)
  if line.strip()=='drop':
   for t in transports:hang_up(t)
   print(json.dumps({'dropped':True}),flush=True)

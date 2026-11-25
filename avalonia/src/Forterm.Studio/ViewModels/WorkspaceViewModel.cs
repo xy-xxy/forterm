@@ -136,6 +136,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(IsActive) or nameof(ShowMonitor) or nameof(IsConnected)) Monitor?.SetVisible(ShowMonitor && IsActive && IsConnected && session != null);
+            if (e.PropertyName is nameof(IsActive) or nameof(IsConnected)) RaiseDesk();
         };
     }
 
@@ -244,15 +245,21 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         if (actions == null || node.IsDirectory || node.IsPlaceholder) return null;
         // The editor opens where the files are shown; it stays with the source it came from.
         var desk = Desk;
-        var existing = desk.Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
-        if (existing != null) { desk.ShowCenter(); desk.ActiveTab = existing; return existing; }
+        // One draft of a file: an editor already open for it, here or in another session of the window, is shown instead.
+        EditorTabViewModel? ShowOpened()
+        {
+            if (OpenedAnywhere(desk, actions.Source.SourceId, node.Path) is not var (owner, existing)) return null;
+            owner.ShowCenter(); owner.ActiveTab = existing;
+            if (!ReferenceEquals(owner, desk)) owner.ActivateCommand?.Execute(null);
+            return existing;
+        }
+        if (ShowOpened() is { } opened) return opened;
         if (desk.Editors.Count() >= MaxEditors) throw new IOException($"最多同时打开 {MaxEditors} 个文件，请先关闭已保存的文件");
         var document = await actions.OpenTextAsync(node, lifetime.Token);
         if (disposed != 0) return null;
         // Linked, or no longer, while it was read.
         if (!ReferenceEquals(desk, Desk) && desk.disposed != 0) desk = Desk;
-        existing = desk.Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
-        if (existing != null) { desk.ShowCenter(); desk.ActiveTab = existing; return existing; }
+        if (ShowOpened() is { } openedMeanwhile) return openedMeanwhile;
         var editor = new EditorTabViewModel(document, Title, queue!, interaction, (id, kind) => Transfers?.Register(id, kind), path => Dispatcher.UIThread.Post(() => _ = ReloadDirectoryAsync(path)));
         desk.Show(editor);
         return editor;
@@ -475,6 +482,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
                 Status = $"正在连接 {Host}:{Port} …";
                 Task<bool> Verify(string fingerprint, CancellationToken token) =>
                     knownHosts.VerifyAsync(Host, Port, fingerprint, true, interaction.ConfirmHostKeyAsync, token);
+                trace?.ConcealSecret(password);
                 var connected = await SharedSshSession.ConnectAsync(Host, Port, User, password, Verify, ct, temporary: true,
                     challenge: interaction.AskCredentialsAsync, authMode: keyPath.Length > 0 ? "key" : "password", keyPath: keyPath, options: options);
                 password = "";
@@ -537,8 +545,9 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
 
     void Fail(Exception e)
     {
-        // A server that hangs up says more in the messages before it than the exception does.
-        string why = e is SshConnectionException && trace?.Explanation is { Length: > 0 } explained ? explained : SshErrors.Explain(e);
+        // A server or network that hangs up says more in the messages before it than the exception does; what this program
+        // gave up on itself (a host key, no common algorithm, not an SSH server) the exception says better.
+        string why = trace is { EndedByPeer: true } && trace.Explanation is { Length: > 0 } explained ? explained : SshErrors.Explain(e);
         Status = "连接失败：" + Short(why, MostReason);
         if (FileRoots.Count == 0) FileMessage = Status;
         OfferReport();

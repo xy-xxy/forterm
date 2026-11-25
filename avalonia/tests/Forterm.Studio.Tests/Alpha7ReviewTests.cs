@@ -499,11 +499,17 @@ public sealed class Alpha7ReviewTests
         Point Middle(Button b) => b.TranslatePoint(new Point(b.Bounds.Width / 2, b.Bounds.Height / 2), s.Window)!.Value;
         void Click(Point at) { s.Window.MouseDown(at, MouseButton.Middle); s.Window.MouseUp(at, MouseButton.Middle); }
         var chip = s.Window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("chip-tab") && ReferenceEquals(b.DataContext, second.Terminals[0]));
+        CloseGuard.ForgetForTest();
         Click(Middle(chip));
         await Pump(() => second.Terminals.Count == 1, TimeSpan.FromSeconds(3));
         Assert.Single(second.Terminals);
         Settle(s.Window);
         var tab = s.Window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("session-tab") && ReferenceEquals(b.DataContext, first));
+        // Half a second after a close nothing closes (alpha.9): the next tab has just moved under the pointer.
+        Click(Middle(tab));
+        Settle(s.Window);
+        Assert.Equal(2, s.Model.Workspaces.Count);
+        CloseGuard.ForgetForTest();
         Click(Middle(tab));
         await Pump(() => s.Model.Workspaces.Count == 1, TimeSpan.FromSeconds(5));
         Assert.Same(second, Assert.Single(s.Model.Workspaces));

@@ -30,8 +30,9 @@ public sealed partial class WorkspaceViewModel
     public bool IsTabShown => !IsLinked || HasShell || Editors.Any();
     /// <summary>The session that shows the files of this one, the one in front first.</summary>
     internal WorkspaceViewModel? Viewer => viewers.FirstOrDefault(v => v.IsActive) ?? viewers.FirstOrDefault();
-    /// <summary>Where things opened from the files of this session go: its terminal, its editors.</summary>
-    WorkspaceViewModel Desk => Viewer ?? this;
+    /// <summary>Where things opened from the files of this session go: the session on screen. That is this one when it is
+    /// in front (a file session with a terminal or editors of its own keeps its tab), otherwise the one showing its files.</summary>
+    WorkspaceViewModel Desk => IsActive ? this : Viewer ?? this;
     public string FilesTitle => linked?.Title ?? "文件工作区";
     public string LinkTip => linked == null ? "关联已打开的文件会话（xftp / SFTP / FTP）" : $"正在显示“{linked.Title}”的文件";
     /// <summary>No files of its own, and none from elsewhere: the column offers to link.</summary>
@@ -92,6 +93,21 @@ public sealed partial class WorkspaceViewModel
         if (!IsLinked) return;
         Raise(nameof(IsTabShown));
         LinksChanged?.Invoke();
+    }
+
+    /// <summary>Which session is in front, or whether the one showing these files can have a terminal, has changed.</summary>
+    void RaiseDesk()
+    {
+        if (IsLinked) Raise(nameof(CanUseTerminalFromFiles));
+        linked?.Raise(nameof(CanUseTerminalFromFiles));
+    }
+
+    /// <summary>An editor of this file that is open anywhere in the window, where it is shown first.</summary>
+    (WorkspaceViewModel Owner, EditorTabViewModel Editor)? OpenedAnywhere(WorkspaceViewModel desk, Guid sourceId, string path)
+    {
+        foreach (var w in new[] { desk }.Concat(Sessions?.Invoke() ?? []))
+            if (w.disposed == 0 && w.Editors.FirstOrDefault(e => e.Source.SourceId == sourceId && e.Path == path) is { } editor) return (w, editor);
+        return null;
     }
 
     void RaiseLink()

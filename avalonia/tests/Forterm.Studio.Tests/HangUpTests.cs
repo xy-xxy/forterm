@@ -129,7 +129,7 @@ public sealed class HangUpTests
         Assert.Contains("服务器没能连上目标", workspace.FileMessage);
         Assert.True(workspace.ShowReport);
         string report = workspace.Report();
-        Assert.Contains("← CHANNEL_OPEN_FAILURE(92) 通道1 代码2 target ‹已隐去› is down", report);
+        Assert.Contains("← CHANNEL_OPEN_FAILURE(92) 本方通道1 代码2 target ‹已隐去› is down", report);
         Assert.Contains("结果：连接仍在", report);
         Assert.DoesNotContain(Ticket, report);
     }
@@ -286,9 +286,12 @@ public sealed class HangUpTests
         var entry = Assert.Single(h.Model.Palette.Matches, e => e.Title == "复制连接诊断");
         h.Model.Palette.RunCommand.Execute(entry);
         await Pump(() => h.Interaction.Clipboard.Length > 0);
-        Assert.Contains("→ CHANNEL_REQUEST(98) 通道0 pty-req", h.Interaction.Clipboard);
-        Assert.Contains("→ CHANNEL_REQUEST(98) 通道0 shell", h.Interaction.Clipboard);
-        Assert.Contains("→ CHANNEL_REQUEST(98) 通道1 subsystem", h.Interaction.Clipboard);
+        // The numbers of what is sent are the server's; it says so.
+        Assert.Contains("→ CHANNEL_REQUEST(98) 对方通道0 pty-req", h.Interaction.Clipboard);
+        Assert.Contains("→ CHANNEL_REQUEST(98) 对方通道0 shell", h.Interaction.Clipboard);
+        Assert.Contains("→ CHANNEL_REQUEST(98) 对方通道1 subsystem", h.Interaction.Clipboard);
+        Assert.Contains("← CHANNEL_SUCCESS(99) 本方通道", h.Interaction.Clipboard);
+        Assert.Contains("发出的是服务器的编号，收到的是本程序的", h.Interaction.Clipboard);
     }
 
     [AvaloniaTheory]
@@ -373,8 +376,8 @@ public sealed class SshTraceTests
         string report = Report(trace);
         Assert.InRange(report.Split('\n').Length, 100, SshTrace.MostFirst + SshTrace.MostLast + 20);
         // How it began, what came last, and how much is missing between them.
-        Assert.Contains("CHANNEL_CLOSE(97) 通道0", report);
-        Assert.Contains("CHANNEL_CLOSE(97) 通道4999", report);
+        Assert.Contains("→ CHANNEL_CLOSE(97) 对方通道0", report);
+        Assert.Contains("← CHANNEL_CLOSE(97) 本方通道4999", report);
         Assert.DoesNotContain("通道2500", report);
         Assert.Contains("中间省略 " + (5000 + 1 + 1 - SshTrace.MostFirst - SshTrace.MostLast) + " 行", report);
         Assert.EndsWith("没有包含：地址、用户名、密码、票据、终端内容、文件名。", report);

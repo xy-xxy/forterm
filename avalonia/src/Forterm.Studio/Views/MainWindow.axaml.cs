@@ -206,7 +206,8 @@ public sealed partial class MainWindow : Window
             if ((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("session-tab"))?.DataContext is WorkspaceViewModel w && w.CloseCommand?.CanExecute(null) == true)
             {
                 e.Handled = true;
-                w.CloseCommand.Execute(null);
+                // The next tab is where this one was: a double click closes one.
+                if (!CloseGuard.Blocks(e)) w.CloseCommand.Execute(null);
             }
         }, RoutingStrategies.Tunnel);
         tabs.PointerWheelChanged += (_, e) => { tabs.Offset = new Vector(Math.Max(0, tabs.Offset.X - (e.Delta.X + e.Delta.Y) * 40), 0); e.Handled = true; };
