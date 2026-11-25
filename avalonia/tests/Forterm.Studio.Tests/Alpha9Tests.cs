@@ -250,8 +250,9 @@ public sealed class Alpha9Tests
             Assert.True((await Task.Run(() => InstanceBroker.StartAsync(name, ["after"], _ => true, CancellationToken.None)).WaitAsync(TimeSpan.FromSeconds(8))).Forwarded);
             Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), clock.Elapsed.ToString());
             // Rubbish ends nothing.
-            await silent[0].WriteAsync(new byte[] { 255, 255, 255, 127, 1, 2, 3 });
-            await silent[1].WriteAsync(new byte[] { 3, 0, 0, 0, (byte)'{', (byte)'x', (byte)'}' });
+            foreach (var (c, rubbish) in new (System.IO.Pipes.NamedPipeClientStream, byte[])[] { (silent[0], [255, 255, 255, 127, 1, 2, 3]), (silent[1], [3, 0, 0, 0, (byte)'{', (byte)'x', (byte)'}']) })
+                try { await c.WriteAsync(rubbish).AsTask().WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch (IOException) { } // turned away while it was still being written (Windows)
             foreach (var c in silent) c.Dispose();
             Assert.True((await Task.Run(() => InstanceBroker.StartAsync(name, ["last"], _ => true, CancellationToken.None)).WaitAsync(TimeSpan.FromSeconds(8))).Forwarded);
             lock (got) Assert.Equal("last", got[^1]);
