@@ -66,7 +66,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         for (int i = 0; i < Workspaces.Count; i++)
         {
             var w = Workspaces[i];
-            if (!ReferenceEquals(w, selected)) yield return new PaletteEntry("会话", w.Title, w.Endpoint, "", () => Show(w));
+            if (!ReferenceEquals(w, selected) && w.IsTabShown) yield return new PaletteEntry("会话", w.Title, w.Endpoint, "", () => Show(w));
         }
         if (selected is WorkspaceViewModel current)
         {
@@ -84,10 +84,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (current.CanShowFiles)
             {
                 yield return Do("界面", current.ShowFiles ? "收起文件栏" : "显示文件栏", current.ToggleFilesCommand);
-                if (current.HasFiles)
+                if (current.CanLinkFiles)
                 {
-                    yield return Do("文件", "上传文件到当前目录", current.UploadFilesCommand, detail: current.CurrentDirectory);
-                    yield return Do("文件", "新建文件夹", current.NewFolderCommand, detail: current.CurrentDirectory);
+                    foreach (var source in current.LinkChoices)
+                        if (!ReferenceEquals(source, current.FileView)) yield return new PaletteEntry("文件", "关联文件会话：" + source.Title, source.Endpoint, "", OnlyHere(() => current.Link(source)));
+                    if (current.ShowsLinkedFiles) yield return new PaletteEntry("文件", "解除关联文件会话", current.FilesTitle, "", OnlyHere(current.Unlink));
+                }
+                var files = current.FileView;
+                if (files.HasFiles)
+                {
+                    yield return Do("文件", "上传文件到当前目录", files.UploadFilesCommand, detail: files.CurrentDirectory);
+                    yield return Do("文件", "新建文件夹", files.NewFolderCommand, detail: files.CurrentDirectory);
                 }
             }
             yield return Do("界面", current.ShowTerminal ? "收起终端栏" : "显示终端栏", current.ToggleTerminalCommand);
@@ -116,7 +123,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     void Show(WorkspaceViewModel workspace)
     {
         Selected = workspace;
-        FocusRequested?.Invoke(workspace);
+        // Itself, or the session that shows its files.
+        if (selected is WorkspaceViewModel shown && (ReferenceEquals(shown, workspace) || ReferenceEquals(shown, workspace.Viewer))) FocusRequested?.Invoke(shown);
     }
 
     bool closing;
@@ -152,12 +160,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Steps through the sessions, around the end.</summary>
     public void StepSession(int by)
     {
-        if (Workspaces.Count == 0) return;
-        int at = selected is WorkspaceViewModel w ? Workspaces.IndexOf(w) : by > 0 ? -1 : 0;
-        Show(Workspaces[(at + by + Workspaces.Count) % Workspaces.Count]);
+        var tabs = Tabs;
+        if (tabs.Count == 0) return;
+        int at = selected is WorkspaceViewModel w ? tabs.IndexOf(w) : by > 0 ? -1 : 0;
+        Show(tabs[(at + by + tabs.Count) % tabs.Count]);
     }
 
-    public void ShowSession(int number) { if (number >= 1 && number <= Workspaces.Count) Show(Workspaces[number - 1]); }
+    public void ShowSession(int number) { if (Tabs is var tabs && number >= 1 && number <= tabs.Count) Show(tabs[number - 1]); }
+
+    /// <summary>The sessions that have a tab.</summary>
+    List<WorkspaceViewModel> Tabs => Workspaces.Where(w => w.IsTabShown).ToList();
 
     /// <summary>0 = back to the default size.</summary>
     public void ZoomTerminal(int by) => SavePreferences(p => p with { TerminalFontSize = by == 0 ? new StudioPreferences().TerminalFontSize : p.TerminalFontSize + by });
@@ -187,6 +199,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         set
         {
             if (value is WorkspaceViewModel shown && !Workspaces.Contains(shown)) return; // closed meanwhile
+            // Its files are shown in another session, and nothing else of it has a place.
+            if (value is WorkspaceViewModel { IsTabShown: false, Viewer: { } viewer }) value = viewer;
             if (!Set(ref selected, value)) return;
             Palette.Dismiss();
             foreach (var workspace in Workspaces) workspace.IsActive = ReferenceEquals(workspace, value);
@@ -259,6 +273,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         workspace.QuickCommands = QuickCommands;
         workspace.ShowSettings = OpenSettings;
         workspace.SavePreferences = SavePreferences;
+        workspace.Sessions = () => Workspaces;
+        workspace.LinksChanged = () => { Palette.Dismiss(); Selected = Selected; };
         workspace.ActivateCommand = new RelayCommand(() => Show(workspace));
         workspace.CloseCommand = new AsyncCommand(async () =>
         {
@@ -283,7 +299,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (!workspace.NeedsCloseConfirmation) continue;
             Selected = workspace;
-            if (!await workspace.ConfirmCloseAsync()) return false;
+            if (!await workspace.ConfirmCloseAsync(all: true)) return false;
         }
         if (Home.Tunnels is { RunningCount: > 0 } tunnels &&
             !await interaction.ConfirmAsync("关闭窗口？", $"{tunnels.RunningCount} 个隧道正在运行，关闭窗口会停止它们。", "关闭", danger: false)) return false;
@@ -296,10 +312,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         int index = Workspaces.IndexOf(workspace);
         if (index < 0) return;
+        workspace.EndLinks();
         Workspaces.RemoveAt(index);
+        CloseGuard.Moved();
         Avalonia.Threading.Dispatcher.UIThread.Post(Home.RefreshInfo);
         if (ReferenceEquals(Selected, workspace))
-            Selected = Workspaces.Count == 0 ? Home : Workspaces[Math.Min(index, Workspaces.Count - 1)];
+            Selected = Workspaces.Skip(index).Concat(Workspaces.Take(index).Reverse()).FirstOrDefault(w => w.IsTabShown) ?? (object)Home;
         workspace.Dispose();
     }
 

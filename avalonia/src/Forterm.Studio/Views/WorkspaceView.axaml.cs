@@ -27,6 +27,8 @@ public sealed partial class WorkspaceView : UserControl
     readonly Thumb leftSplitter, rightSplitter;
     readonly TextBlock allHidden;
     WorkspaceViewModel? model;
+    /// <summary>The session whose files the file column shows: the same one, or the one it is linked to.</summary>
+    WorkspaceViewModel? fileModel;
     Flyout? quickFlyout;
     double filesWidth = Appearance.Current.FilesWidth, monitorWidth = Appearance.Current.MonitorWidth;
     Pane maximized = Pane.None, star = Pane.Terminal;
@@ -58,30 +60,36 @@ public sealed partial class WorkspaceView : UserControl
             };
         }
         DataContextChanged += (_, _) => Bind(DataContext as WorkspaceViewModel);
+        // The × that had the keyboard is gone with its column: the keys are for what is left.
+        AddHandler(Button.ClickEvent, (_, e) =>
+        {
+            if (e.Source is not Button b || !b.Classes.Contains("collapse")) return;
+            Dispatcher.UIThread.Post(() => { if (model is { IsActive: true } && KeyboardFocus.IsFree(this)) FocusContent(); }, DispatcherPriority.Background);
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         var tree = this.FindControl<TreeView>("FileTree")!;
         // Right-click selects the row under the pointer (or clears the selection on empty space),
         // so the context menu acts on what the user clicked.
         tree.AddHandler(PointerPressedEvent, (_, e) =>
         {
-            if (!e.GetCurrentPoint(tree).Properties.IsRightButtonPressed || model == null) return;
+            if (!e.GetCurrentPoint(tree).Properties.IsRightButtonPressed || fileModel == null) return;
             var item = (e.Source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
-            if (item?.DataContext is FileNodeViewModel { IsPlaceholder: false } node) model.SelectedNode = node;
-            else if (item == null) model.SelectNothing();
+            if (item?.DataContext is FileNodeViewModel { IsPlaceholder: false } node) fileModel.SelectedNode = node;
+            else if (item == null) fileModel.SelectNothing();
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         // While the context menu is open, pwd follow must not move the selection it acts on.
         if (tree.ContextMenu is { } menu)
         {
-            menu.Opened += (_, _) => model?.SetFileMenuOpen(true);
-            menu.Closed += (_, _) => model?.SetFileMenuOpen(false);
+            menu.Opened += (_, _) => fileModel?.SetFileMenuOpen(true);
+            menu.Closed += (_, _) => fileModel?.SetFileMenuOpen(false);
         }
         tree.DoubleTapped += (_, e) =>
         {
             var item = (e.Source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true);
             if (item?.DataContext is FileNodeViewModel { IsDirectory: true } node && e.Source is not ToggleButton) node.IsExpanded = !node.IsExpanded;
-            else if (item?.DataContext is FileNodeViewModel { IsFile: true } file && model != null)
+            else if (item?.DataContext is FileNodeViewModel { IsFile: true } file && fileModel != null)
             {
-                model.SelectedNode = file;
-                if (model.OpenEditorCommand.CanExecute(null)) model.OpenEditorCommand.Execute(null);
+                fileModel.SelectedNode = file;
+                if (fileModel.OpenEditorCommand.CanExecute(null)) fileModel.OpenEditorCommand.Execute(null);
             }
         };
         SizeChanged += (_, _) => Layout();
@@ -96,6 +104,7 @@ public sealed partial class WorkspaceView : UserControl
         DetachedFromVisualTree += (_, _) => Appearance.Changed -= Details;
         WireTerminal();
         WireFiles(tree);
+        WireLinks();
         // The middle button closes a tab of the centre column.
         terminal.AddHandler(PointerPressedEvent, (_, e) =>
         {
@@ -115,13 +124,13 @@ public sealed partial class WorkspaceView : UserControl
     /// <summary>The tree shows the selection of the session; it does not have one of its own.</summary>
     void ShowSelection()
     {
-        if (model == null) return;
+        if (fileModel == null) return;
         var tree = this.FindControl<TreeView>("FileTree")!;
-        if (!ReferenceEquals(tree.ItemsSource, model.FileRoots) || ReferenceEquals(tree.SelectedItem, model.SelectedNode)) return;
+        if (!ReferenceEquals(tree.ItemsSource, fileModel.FileRoots) || ReferenceEquals(tree.SelectedItem, fileModel.SelectedNode)) return;
         // "空目录" may be where the keys are, although it stands for its directory.
-        if (model.SelectedNode == null && tree.SelectedItem is FileNodeViewModel { IsPlaceholder: true, Parent: { } parent } note && parent.Path == model.CurrentDirectory && model.Owns(note)) return;
+        if (fileModel.SelectedNode == null && tree.SelectedItem is FileNodeViewModel { IsPlaceholder: true, Parent: { } parent } note && parent.Path == fileModel.CurrentDirectory && fileModel.Owns(note)) return;
         showingSelection = true;
-        try { tree.SelectedItem = model.SelectedNode; }
+        try { tree.SelectedItem = fileModel.SelectedNode; }
         finally { showingSelection = false; }
     }
 
@@ -129,8 +138,8 @@ public sealed partial class WorkspaceView : UserControl
     /// exchanged and when another session comes to the front, and is then told again.</summary>
     void OnTreeSelection(TreeView tree)
     {
-        if (showingSelection || model == null || !ReferenceEquals(tree.ItemsSource, model.FileRoots)) return;
-        if (tree.SelectedItem is FileNodeViewModel node && model.Owns(node)) model.SelectedNode = node;
+        if (showingSelection || fileModel == null || !ReferenceEquals(tree.ItemsSource, fileModel.FileRoots)) return;
+        if (tree.SelectedItem is FileNodeViewModel node && fileModel.Owns(node)) fileModel.SelectedNode = node;
         Dispatcher.UIThread.Post(ShowSelection, DispatcherPriority.Background);
     }
 
@@ -146,13 +155,13 @@ public sealed partial class WorkspaceView : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             var tree = this.FindControl<TreeView>("FileTree")!;
-            if (model != null && !tree.IsKeyboardFocusWithin && KeyboardFocus.IsFree(this)) FocusRow(tree);
+            if (fileModel != null && !tree.IsKeyboardFocusWithin && KeyboardFocus.IsFree(this)) FocusRow(tree);
         }, DispatcherPriority.Background);
     }
 
     void FocusRow(TreeView tree)
     {
-        var node = model!.SelectedNode ?? model.RestingNode ?? model.FileRoots.FirstOrDefault();
+        var node = fileModel!.SelectedNode ?? fileModel.RestingNode ?? fileModel.FileRoots.FirstOrDefault();
         if (node != null && tree.TreeContainerFromItem(node) is TreeViewItem row) row.Focus();
     }
 
@@ -162,23 +171,23 @@ public sealed partial class WorkspaceView : UserControl
         // From a place without a row the arrow keys go to the row of its directory, not to the top of the list.
         tree.AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (e.Key is not (Key.Up or Key.Down) || e.KeyModifiers != KeyModifiers.None || tree.SelectedItem != null || model?.RestingNode is not { } directory) return;
+            if (e.Key is not (Key.Up or Key.Down) || e.KeyModifiers != KeyModifiers.None || tree.SelectedItem != null || fileModel?.RestingNode is not { } directory) return;
             e.Handled = true;
-            model.SelectedNode = directory;
+            fileModel.SelectedNode = directory;
             FocusRow(tree);
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         tree.KeyDown += (_, e) =>
         {
-            if (model == null || e.KeyModifiers != KeyModifiers.None) return;
+            if (fileModel == null || e.KeyModifiers != KeyModifiers.None) return;
             var command = e.Key switch
             {
-                Key.F2 => model.RenameCommand,
-                Key.Delete => model.DeleteCommand,
-                Key.F5 => model.RefreshDirectoryCommand,
-                Key.Enter when model.SelectedNode is { IsFile: true } => model.OpenEditorCommand,
+                Key.F2 => fileModel.RenameCommand,
+                Key.Delete => fileModel.DeleteCommand,
+                Key.F5 => fileModel.RefreshDirectoryCommand,
+                Key.Enter when fileModel.SelectedNode is { IsFile: true } => fileModel.OpenEditorCommand,
                 _ => null,
             };
-            if (command?.CanExecute(null) != true || model.SelectedNode == null && e.Key != Key.F5) return;
+            if (command?.CanExecute(null) != true || fileModel.SelectedNode == null && e.Key != Key.F5) return;
             e.Handled = true;
             command.Execute(null);
         };
@@ -204,10 +213,10 @@ public sealed partial class WorkspaceView : UserControl
         var hint = this.FindControl<Border>("DropHint")!;
         var name = this.FindControl<TextBlock>("DropTarget")!;
         DragDrop.SetAllowDrop(files, true);
-        string Target(DragEventArgs e) => model!.DropDirectory((e.Source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext as FileNodeViewModel);
+        string Target(DragEventArgs e) => fileModel!.DropDirectory((e.Source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext as FileNodeViewModel);
         void Over(DragEventArgs e)
         {
-            bool able = model is { HasFiles: true } && e.DataTransfer.Contains(DataFormat.File);
+            bool able = fileModel is { HasFiles: true } && e.DataTransfer.Contains(DataFormat.File);
             e.DragEffects = able ? DragDropEffects.Copy : DragDropEffects.None;
             hint.IsVisible = able;
             if (able) name.Text = Target(e);
@@ -219,11 +228,11 @@ public sealed partial class WorkspaceView : UserControl
         DragDrop.AddDropHandler(files, (_, e) =>
         {
             hint.IsVisible = false;
-            if (model is not { HasFiles: true }) return;
+            if (fileModel is not { HasFiles: true }) return;
             e.Handled = true;
             string target = Target(e);
             string?[] paths = e.DataTransfer.TryGetFiles()?.Select(f => { string? path = f.TryGetLocalPath(); f.Dispose(); return path; }).ToArray() ?? [];
-            if (paths.Length > 0) _ = model.DropAsync(target, paths.OfType<string>().ToArray(), paths.Count(p => p == null));
+            if (paths.Length > 0) _ = fileModel.DropAsync(target, paths.OfType<string>().ToArray(), paths.Count(p => p == null));
         });
     }
 
@@ -281,15 +290,70 @@ public sealed partial class WorkspaceView : UserControl
 
     void Bind(WorkspaceViewModel? next)
     {
-        if (model != null) { model.PropertyChanged -= OnModelChanged; model.Find.Opened -= OnFindOpened; model.RowsChanging -= OnRowsChanging; model.RowsChanged -= OnRowsChanged; }
+        if (model != null) { model.PropertyChanged -= OnModelChanged; model.Find.Opened -= OnFindOpened; }
         // Another session is shown: a list opened for the last one must not type into this one.
         quickFlyout?.Hide();
         model = next;
-        if (model != null) { model.PropertyChanged += OnModelChanged; model.Find.Opened += OnFindOpened; model.RowsChanging += OnRowsChanging; model.RowsChanged += OnRowsChanged; }
+        if (model != null) { model.PropertyChanged += OnModelChanged; model.Find.Opened += OnFindOpened; }
+        BindFiles();
         maximized = Pane.None;
         lastTab = model?.ActiveTab;
         Layout();
         Dispatcher.UIThread.Post(ShowSelection, DispatcherPriority.Background);
+    }
+
+    /// <summary>Another session's files are shown: those of the session in front, or of the one it is linked to.</summary>
+    void BindFiles()
+    {
+        var next = model?.FileView;
+        if (ReferenceEquals(next, fileModel)) return;
+        if (fileModel != null)
+        {
+            fileModel.PropertyChanged -= OnFilesChanged;
+            fileModel.RowsChanging -= OnRowsChanging;
+            fileModel.RowsChanged -= OnRowsChanged;
+            // Its menu is not the one that is open now.
+            fileModel.SetFileMenuOpen(false);
+        }
+        linkFlyout?.Hide();
+        fileModel = next;
+        if (fileModel == null) return;
+        fileModel.PropertyChanged += OnFilesChanged;
+        fileModel.RowsChanging += OnRowsChanging;
+        fileModel.RowsChanged += OnRowsChanged;
+        Dispatcher.UIThread.Post(ShowSelection, DispatcherPriority.Background);
+    }
+
+    void OnFilesChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(WorkspaceViewModel.SelectedNode)) ShowSelection();
+    }
+
+    MenuFlyout? linkFlyout;
+
+    /// <summary>The file sessions that are open, to choose from.</summary>
+    void WireLinks()
+    {
+        foreach (string name in new[] { "LinkButton", "OfferLink" })
+            if (this.FindControl<Button>(name)!.Flyout is MenuFlyout menu)
+                menu.Opening += (_, _) =>
+                {
+                    linkFlyout = menu;
+                    menu.Items.Clear();
+                    if (model is not { } desk) return;
+                    var choices = desk.LinkChoices;
+                    foreach (var source in choices)
+                        menu.Items.Add(new MenuItem
+                        {
+                            Header = new TextBlock { Text = desk.LinkLabel(source), MaxWidth = 420, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis },
+                            Icon = new StrokeIcon { Data = Application.Current!.TryGetResource("Icon.Check", null, out object? icon) ? icon as Avalonia.Media.Geometry : null, Width = 12, Height = 12, IsVisible = ReferenceEquals(source, desk.FileView) },
+                            Command = new RelayCommand(() => desk.Link(source)),
+                        });
+                    if (choices.Count == 0) menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "没有打开的文件会话。请先从控制器用 xftp 打开，或在连接库打开 SFTP / FTP 连接。", MaxWidth = 320, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
+                    if (!desk.ShowsLinkedFiles) return;
+                    menu.Items.Add(new Separator());
+                    menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "解除关联，恢复为单独的页签" }, Command = new RelayCommand(desk.Unlink) });
+                };
     }
 
     CenterTabViewModel? lastTab;
@@ -325,7 +389,7 @@ public sealed partial class WorkspaceView : UserControl
     void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(WorkspaceViewModel.ActiveTab)) FollowTab();
-        if (e.PropertyName == nameof(WorkspaceViewModel.SelectedNode)) ShowSelection();
+        if (e.PropertyName == nameof(WorkspaceViewModel.FileView)) BindFiles();
         if (e.PropertyName == nameof(WorkspaceViewModel.Status)) Motion.Flash(this.FindControl<TextBlock>("StatusText")!);
         if (e.PropertyName == nameof(WorkspaceViewModel.ShowFiles) && model!.ShowFiles) Motion.Enter(files);
         if (e.PropertyName == nameof(WorkspaceViewModel.ShowTerminal) && model!.ShowTerminal) Motion.Enter(terminal);

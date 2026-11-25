@@ -230,27 +230,32 @@ public sealed partial class WorkspaceViewModel
     /// <summary>"执行 CD 命令到终端": types <c>cd &lt;dir&gt;</c> into the active terminal (user action).</summary>
     async Task CdToTerminalAsync()
     {
-        if (session == null) { FileNotice = "只有 SSH 会话可以联动终端"; return; }
+        // Linked files are used next to the terminal of the session that shows them.
+        var desk = Desk;
+        if (desk.session == null) { FileNotice = "只有 SSH 会话可以联动终端"; return; }
         string directory = CurrentDirectory;
         if (CdCommand(directory) is not { } command) { FileNotice = "路径含控制字符，不输入到终端"; return; }
-        if (!await MayTypeIntoTerminalAsync()) return;
-        ShowTerminal = true;
-        var tab = await EnsureShellAsync();
+        if (!await desk.MayTypeIntoTerminalAsync()) return;
+        if (desk.disposed != 0 || !ReferenceEquals(desk, Desk)) return;
+        desk.ShowTerminal = true;
+        var tab = await desk.EnsureShellAsync();
         if (tab == null) { FileNotice = "终端不可用"; return; }
-        ActiveTerminal = tab;
-        await WriteTerminalAsync(tab, command, "CD 命令", byUser: true);
+        desk.ActiveTerminal = tab;
+        await desk.WriteTerminalAsync(tab, command, "CD 命令", byUser: true);
     }
 
     /// <summary>"新建终端到当前目录": a new shell tab on the same transport, then <c>cd</c>.</summary>
     async Task NewTerminalHereAsync()
     {
-        if (session == null) { FileNotice = "只有 SSH 会话可以新建终端"; return; }
+        var desk = Desk;
+        if (desk.session == null) { FileNotice = "只有 SSH 会话可以新建终端"; return; }
         string directory = CurrentDirectory;
         if (CdCommand(directory) is not { } command) { FileNotice = "路径含控制字符，不输入到终端"; return; }
-        if (!await MayTypeIntoTerminalAsync()) return;
-        var tab = await AddTerminalAsync();
+        if (!await desk.MayTypeIntoTerminalAsync()) return;
+        if (desk.disposed != 0 || !ReferenceEquals(desk, Desk)) return;
+        var tab = await desk.AddTerminalAsync();
         if (tab == null) { FileNotice = "终端不可用"; return; }
-        await WriteTerminalAsync(tab, command, "CD 命令", byUser: true);
+        await desk.WriteTerminalAsync(tab, command, "CD 命令", byUser: true);
     }
 
     int navigation;

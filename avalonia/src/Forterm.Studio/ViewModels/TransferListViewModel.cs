@@ -10,8 +10,48 @@ namespace Forterm.Studio.ViewModels;
 /// <summary>How a run of transfers and file operations ended.</summary>
 public sealed record TransferBatch(int Uploads, int Downloads, int Operations, IReadOnlyList<string> Failures);
 
+/// <summary>How fast one transfer is. Only the time in which bytes move counts: checking and committing stand still.</summary>
+public sealed class TransferMeter
+{
+    /// <summary>The speed shown is that of the last seconds.</summary>
+    public static readonly TimeSpan Window = TimeSpan.FromSeconds(3);
+    readonly List<(TimeSpan At, long Bytes)> samples = new();
+    TimeSpan moving;
+    long moved;
+
+    /// <summary>Bytes per second lately; null until there is something to tell.</summary>
+    public double? PerSecond { get; private set; }
+    /// <summary>Bytes per second over all of the time in which bytes moved.</summary>
+    public double? Average => moving >= TimeSpan.FromMilliseconds(50) && moved > 0 ? moved / moving.TotalSeconds : null;
+    public TimeSpan Moving => moving;
+
+    public void Add(TimeSpan now, long bytes)
+    {
+        if (samples.Count > 0)
+        {
+            var last = samples[^1];
+            // Another file of a folder, or the same one from its start: counted from here.
+            if (bytes < last.Bytes) { samples.Clear(); samples.Add((now, bytes)); PerSecond = null; return; }
+            if (now < last.At) return;
+            moving += now - last.At;
+            moved += bytes - last.Bytes;
+            // Many within a moment are one.
+            if (samples.Count > 1 && now - samples[^2].At < TimeSpan.FromMilliseconds(150)) samples[^1] = (now, bytes);
+            else samples.Add((now, bytes));
+        }
+        else samples.Add((now, bytes));
+        while (samples.Count > 2 && now - samples[1].At >= Window) samples.RemoveAt(0);
+        var span = now - samples[0].At;
+        PerSecond = span >= TimeSpan.FromMilliseconds(300) ? (bytes - samples[0].Bytes) / span.TotalSeconds : PerSecond;
+    }
+
+    /// <summary>Bytes do not move now; what comes next does not count the pause.</summary>
+    public void Rest() { samples.Clear(); PerSecond = null; }
+}
+
 public sealed class TransferItemViewModel : ObservableObject
 {
+    readonly TransferMeter meter = new();
     TransferSnapshot snapshot;
 
     public TransferItemViewModel(TransferSnapshot snapshot, TransferKind kind, Action<Guid> cancel)
@@ -20,6 +60,27 @@ public sealed class TransferItemViewModel : ObservableObject
         Kind = kind;
         CancelCommand = new RelayCommand(() => cancel(Id));
     }
+
+    /// <summary>Bytes are on their way (not queued, not being checked or committed).</summary>
+    public bool IsMoving => snapshot is { State: TransferState.Running, Unit: "B" } && Kind != TransferKind.Operation;
+    public double? Speed => IsMoving ? meter.PerSecond : null;
+    /// <summary>"3.2 MB/s" while it runs, the average when it has ended.</summary>
+    public string SpeedText => IsMoving ? meter.PerSecond is { } now ? Bytes((long)now) + "/s" : ""
+        : !IsActive && Kind != TransferKind.Operation && meter.Average is { } average ? "平均 " + Bytes((long)average) + "/s" : "";
+    /// <summary>"剩余 12 秒"; nothing while it stands still.</summary>
+    public string RemainingText => IsMoving && snapshot.Total is { } total && meter.PerSecond is >= 1 and var speed && total > snapshot.Bytes ? "剩余 " + Duration(TimeSpan.FromSeconds(Math.Min((total - snapshot.Bytes) / speed, 359_999))) : "";
+    public bool HasSpeed => SpeedText.Length > 0;
+
+    /// <summary>The amount as it is now; also when nothing has changed, since that is a speed of zero.</summary>
+    public void Measure(TimeSpan now)
+    {
+        if (IsMoving) meter.Add(now, snapshot.Bytes);
+        else meter.Rest();
+        Raise(nameof(Speed)); Raise(nameof(SpeedText)); Raise(nameof(RemainingText)); Raise(nameof(HasSpeed)); Raise(nameof(IsMoving));
+    }
+
+    static string Duration(TimeSpan t) => t.TotalSeconds < 60 ? Math.Max(1, (int)Math.Ceiling(t.TotalSeconds)) + " 秒"
+        : t.TotalMinutes < 60 ? $"{(int)t.TotalMinutes} 分 {t.Seconds:00} 秒" : $"{(int)t.TotalHours} 小时 {t.Minutes:00} 分";
 
     public Guid Id => snapshot.Id;
     public TransferKind Kind { get; }
@@ -50,15 +111,19 @@ public sealed class TransferItemViewModel : ObservableObject
         : snapshot.Bytes > 0 && snapshot.Unit == "B" ? Bytes(snapshot.Bytes) : "";
     public ICommand CancelCommand { get; }
 
-    public void Update(TransferSnapshot next)
+    public void Update(TransferSnapshot next, TimeSpan now)
     {
+        bool moved = IsMoving;
         if (next == snapshot) return;
+        // The last bytes count, although it is being checked by the time they are seen.
+        if (moved && next.Unit == "B" && next.State != TransferState.Running && next.Bytes >= snapshot.Bytes) meter.Add(now, next.Bytes);
         snapshot = next;
+        Measure(now);
         Raise(nameof(Name)); Raise(nameof(IsActive)); Raise(nameof(CanCancel)); Raise(nameof(IsFailed)); Raise(nameof(IsDone));
         Raise(nameof(Percent)); Raise(nameof(HasProgress)); Raise(nameof(StateText)); Raise(nameof(AmountText));
     }
 
-    static string Bytes(long b) => b switch
+    internal static string Bytes(long b) => b switch
     {
         >= 1L << 30 => $"{b / (double)(1L << 30):0.0} GB",
         >= 1L << 20 => $"{b / (double)(1L << 20):0.0} MB",
@@ -73,12 +138,19 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     readonly TransferQueue queue;
     readonly Dictionary<Guid, TransferKind> kinds = new();
     readonly Dictionary<Guid, TransferItemViewModel> items = new();
+    readonly TimeProvider time;
+    readonly long began;
+    readonly DispatcherTimer clock = new() { Interval = TimeSpan.FromMilliseconds(500) };
     string filter = "all";
     bool refreshQueued;
 
-    public TransferListViewModel(TransferQueue queue)
+    public TransferListViewModel(TransferQueue queue, TimeProvider? time = null)
     {
         this.queue = queue;
+        this.time = time ?? TimeProvider.System;
+        began = this.time.GetTimestamp();
+        // A transfer that stands still reports nothing; its speed falls all the same.
+        clock.Tick += (_, _) => Tick();
         queue.Changed += OnChanged;
         ShowAllCommand = new RelayCommand(() => Filter = "all");
         ShowUploadsCommand = new RelayCommand(() => Filter = "up");
@@ -92,6 +164,28 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     public int DownloadCount => items.Values.Count(i => i.IsDownload);
     public int ActiveCount => items.Values.Count(i => i.IsActive);
     public bool HasActive => ActiveCount > 0;
+    TimeSpan Now => time.GetElapsedTime(began);
+    string Speeds(TransferKind kind) => items.Values.Where(i => i.Kind == kind && i.Speed != null).ToList() is { Count: > 0 } moving ? TransferItemViewModel.Bytes((long)moving.Sum(i => i.Speed!.Value)) + "/s" : "";
+    /// <summary>All uploads together, and all downloads: "3.2 MB/s"; "" when none is moving.</summary>
+    public string UploadSpeed => Speeds(TransferKind.Upload);
+    public string DownloadSpeed => Speeds(TransferKind.Download);
+    public bool IsUploading => UploadSpeed.Length > 0;
+    public bool IsDownloading => DownloadSpeed.Length > 0;
+    void RaiseSpeeds() { Raise(nameof(UploadSpeed)); Raise(nameof(DownloadSpeed)); Raise(nameof(IsUploading)); Raise(nameof(IsDownloading)); }
+
+    internal void Tick()
+    {
+        var now = Now;
+        foreach (var item in items.Values) if (item.IsMoving) item.Measure(now);
+        RaiseSpeeds();
+        Run();
+    }
+    void Run()
+    {
+        bool moving = items.Values.Any(i => i.IsMoving);
+        if (moving == clock.IsEnabled) return;
+        if (moving) clock.Start(); else clock.Stop();
+    }
     public bool IsEmpty => Visible.Count == 0;
     public string Filter { get => filter; set { if (Set(ref filter, value)) { Raise(nameof(FilterAll)); Raise(nameof(FilterUp)); Raise(nameof(FilterDown)); Rebuild(); } } }
     public bool FilterAll => filter == "all";
@@ -131,12 +225,13 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
         foreach (var gone in items.Keys.Where(id => !present.Contains(id)).ToList()) items.Remove(gone);
         foreach (var s in snapshot)
         {
-            if (items.TryGetValue(s.Id, out var item)) item.Update(s);
+            if (items.TryGetValue(s.Id, out var item)) item.Update(s, Now);
             else
             {
                 TransferKind kind;
                 lock (kinds) kind = kinds.GetValueOrDefault(s.Id, TransferKind.Operation);
                 items[s.Id] = new TransferItemViewModel(s, kind, queue.Cancel);
+                items[s.Id].Measure(Now);
             }
         }
         Rebuild();
@@ -147,10 +242,18 @@ public sealed class TransferListViewModel : ObservableObject, IDisposable
     {
         var wanted = items.Values.Where(i => filter switch { "up" => i.IsUpload, "down" => i.IsDownload, _ => true })
             .OrderByDescending(i => i.IsActive).ToList();
-        Visible.Clear();
-        foreach (var item in wanted) Visible.Add(item);
+        // Rows that stay are left alone: several times a second is too often to build them again.
+        for (int i = Visible.Count - 1; i >= 0; i--) if (!wanted.Contains(Visible[i])) Visible.RemoveAt(i);
+        for (int i = 0; i < wanted.Count; i++)
+        {
+            int at = Visible.IndexOf(wanted[i]);
+            if (at < 0) Visible.Insert(i, wanted[i]);
+            else if (at != i) Visible.Move(at, i);
+        }
         Raise(nameof(AllCount)); Raise(nameof(UploadCount)); Raise(nameof(DownloadCount)); Raise(nameof(ActiveCount)); Raise(nameof(HasActive)); Raise(nameof(IsEmpty));
+        RaiseSpeeds();
+        Run();
     }
 
-    public void Dispose() => queue.Changed -= OnChanged;
+    public void Dispose() { queue.Changed -= OnChanged; clock.Stop(); }
 }

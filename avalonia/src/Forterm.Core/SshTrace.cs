@@ -13,14 +13,17 @@ namespace Forterm.Core;
 /// only kept in memory. Used to tell the user, and whoever runs the server, at which step a server hung up.</summary>
 public sealed partial class SshTrace : ILoggerFactory
 {
-    /// <summary>How many lines are kept; after that only the end of the connection is.</summary>
-    public const int Most = 160;
+    /// <summary>How many lines are kept: how it began, and what came last.</summary>
+    public const int MostFirst = 100, MostLast = 60;
     public const int MostBanner = 2000;
     readonly object gate = new();
     readonly long began = Stopwatch.GetTimestamp();
-    readonly List<Line> lines = new();
+    readonly List<Line> first = new();
+    readonly Queue<Line> last = new();
+    Line? newest;
+    long skipped;
     string client = "", server = "", agreed = "", banner = "", ending = "", said = "";
-    bool loggedIn, asked, opened, refused, served, data, full;
+    bool loggedIn, asked, opened, refused, served, data;
     long endedAt;
 
     sealed record Line(long At, string Text, string Said) { public int Times { get; set; } = 1; }
@@ -83,8 +86,10 @@ public sealed partial class SshTrace : ILoggerFactory
             if (agreed.Length > 0) text.AppendLine("协商算法：" + agreed);
             text.AppendLine("结果：" + (ending.Length == 0 ? "连接仍在" : Safe(Explanation)));
             text.AppendLine("协议消息（毫秒，→ 发出，← 收到）：");
-            foreach (var line in lines) text.Append(line.At.ToString().PadLeft(7)).Append("  ").Append(line.Text).Append(Safe(line.Said)).AppendLine(line.Times > 1 ? " ×" + line.Times : "");
-            if (full) text.AppendLine("      …  之后的消息不再记录");
+            void Show(Line line) => text.Append(line.At.ToString().PadLeft(7)).Append("  ").Append(line.Text).Append(Safe(line.Said)).AppendLine(line.Times > 1 ? " ×" + line.Times : "");
+            foreach (var line in first) Show(line);
+            if (skipped > 0) text.AppendLine($"      …  中间省略 {skipped} 行");
+            foreach (var line in last) Show(line);
             if (endedAt > 0) text.Append(endedAt.ToString().PadLeft(7)).Append("  ").AppendLine(ending);
         }
         text.Append("没有包含：地址、用户名、密码、票据、终端内容、文件名。");
@@ -119,17 +124,20 @@ public sealed partial class SshTrace : ILoggerFactory
 
     void Add(string text, string fromServer = "")
     {
-        if (full) return;
-        if (lines.Count > 0 && lines[^1].Text == text && lines[^1].Said == fromServer) { lines[^1].Times++; return; }
-        if (lines.Count == Most) { full = true; return; }
-        lines.Add(new(Now, text, fromServer));
+        if (newest != null && newest.Text == text && newest.Said == fromServer) { newest.Times++; return; }
+        newest = new(Now, text, fromServer);
+        if (first.Count < MostFirst) { first.Add(newest); return; }
+        last.Enqueue(newest);
+        if (last.Count > MostLast) { last.Dequeue(); skipped++; }
     }
     long Now => (long)Stopwatch.GetElapsedTime(began).TotalMilliseconds;
 
     void Message(bool sent, string name, string number, string message)
     {
         if (name == "SSH_MSG_USERAUTH_BANNER") { if (!sent && message.Length > name.Length) OnBanner(message[name.Length..].TrimStart()); return; }
-        var detail = Detail(message);
+        // What is in the channels is many messages, and says nothing here.
+        bool contents = name is "SSH_MSG_CHANNEL_DATA" or "SSH_MSG_CHANNEL_EXTENDED_DATA" or "SSH_MSG_CHANNEL_WINDOW_ADJUST";
+        var detail = contents ? default : Detail(message);
         lock (gate)
         {
             switch (name)
@@ -141,7 +149,8 @@ public sealed partial class SshTrace : ILoggerFactory
                 case "SSH_MSG_CHANNEL_SUCCESS": served |= !sent; break;
                 case "SSH_MSG_CHANNEL_DATA": data |= !sent; break;
             }
-            Add((sent ? "→ " : "← ") + name.Replace("SSH_MSG_", "") + "(" + number + ")" + detail.Text, detail.Said);
+            if (contents) Add("↔ 通道数据");
+            else Add((sent ? "→ " : "← ") + name.Replace("SSH_MSG_", "") + "(" + number + ")" + detail.Text, detail.Said);
         }
     }
 
@@ -216,8 +225,7 @@ public sealed partial class SshTrace : ILoggerFactory
     sealed class Sink(SshTrace trace) : ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        // Messages are only looked at while there is room for them.
-        public bool IsEnabled(LogLevel level) => level >= LogLevel.Information || level == LogLevel.Trace && !Volatile.Read(ref trace.full);
+        public bool IsEnabled(LogLevel level) => level >= LogLevel.Information || level == LogLevel.Trace;
         public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> formatter)
         {
             // A trace must never be what ends a connection.

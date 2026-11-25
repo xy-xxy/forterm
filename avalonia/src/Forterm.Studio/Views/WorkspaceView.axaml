@@ -42,16 +42,24 @@
       <!-- ===== Files ===== -->
       <c:StudioPane Name="FilesPane" Grid.Column="0" CloseCommand="{Binding HideFilesCommand}">
         <c:StudioPane.Header>
-          <Border Classes="pane-chip">
+          <StackPanel Orientation="Horizontal" Spacing="3">
+          <Border Classes="pane-chip" ToolTip.Tip="{Binding LinkTip}">
             <StackPanel Orientation="Horizontal" Spacing="5">
-              <TextBlock Classes="chip-text" Text="文件工作区"/>
-              <Button Classes="chip-close" Command="{Binding HideFilesCommand}" ToolTip.Tip="收起此栏">
+              <c:StrokeIcon Data="{StaticResource Icon.Chain}" Width="11" Height="11" Thickness="2" Brush="{DynamicResource St.Accent}" IsVisible="{Binding ShowsLinkedFiles}" VerticalAlignment="Center"/>
+              <TextBlock Classes="chip-text" Text="{Binding FilesTitle}" MaxWidth="96" TextTrimming="CharacterEllipsis"/>
+              <Button Classes="chip-close collapse" Command="{Binding HideFilesCommand}" ToolTip.Tip="收起此栏（会话不断开）" AutomationProperties.Name="收起文件栏">
                 <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
               </Button>
             </StackPanel>
           </Border>
+          <Button Name="LinkButton" Classes="pane-icon" IsVisible="{Binding CanLinkFiles}" ToolTip.Tip="{Binding LinkTip}" AutomationProperties.Name="关联文件会话">
+            <c:StrokeIcon Data="{StaticResource Icon.Chain}" Width="13" Height="13" Thickness="1.8"/>
+            <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedLeft"/></Button.Flyout>
+          </Button>
+          </StackPanel>
         </c:StudioPane.Header>
-        <DockPanel>
+        <!-- The files shown are those of this session, or of the file session it is linked to. -->
+        <DockPanel Name="FilesBody" DataContext="{Binding FileView}">
           <!-- toolbar -->
           <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,2,6,0">
             <StackPanel Orientation="Horizontal" Spacing="1">
@@ -86,7 +94,17 @@
                 <Flyout Placement="BottomEdgeAlignedRight">
                   <Border Width="400" Padding="4" DataContext="{Binding Transfers}" x:DataType="vm:TransferListViewModel">
                     <DockPanel>
-                      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="4,2,2,8">
+                      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="4,2,2,8">
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="0,0,6,0" VerticalAlignment="Center">
+                          <StackPanel Name="UploadSpeed" Orientation="Horizontal" Spacing="3" IsVisible="{Binding IsUploading}" ToolTip.Tip="上传速度">
+                            <c:StrokeIcon Data="{StaticResource Icon.Upload}" Width="11" Height="11" Brush="{DynamicResource St.Accent}"/>
+                            <TextBlock FontFeatures="tnum" Text="{Binding UploadSpeed}" FontSize="11.5"/>
+                          </StackPanel>
+                          <StackPanel Name="DownloadSpeed" Orientation="Horizontal" Spacing="3" IsVisible="{Binding IsDownloading}" ToolTip.Tip="下载速度">
+                            <c:StrokeIcon Data="{StaticResource Icon.Download}" Width="11" Height="11" Brush="#4D9DE0"/>
+                            <TextBlock FontFeatures="tnum" Text="{Binding DownloadSpeed}" FontSize="11.5"/>
+                          </StackPanel>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                           <c:StrokeIcon Data="{StaticResource Icon.Transfer}" Width="14" Height="14" Brush="{DynamicResource St.Accent}"/>
                           <TextBlock Text="传输管理" Classes="title" FontSize="13"/>
@@ -102,7 +120,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="3"><c:StrokeIcon Data="{StaticResource Icon.Download}" Width="11" Height="11"/><TextBlock Text="{Binding DownloadCount}" FontSize="11.5"/></StackPanel>
                           </Button>
                         </StackPanel>
-                        <Button Grid.Column="2" Classes="flat" Command="{Binding ClearFinishedCommand}" ToolTip.Tip="清除已结束的记录" AutomationProperties.Name="清除已结束">
+                        <Button Grid.Column="3" Classes="flat" Command="{Binding ClearFinishedCommand}" ToolTip.Tip="清除已结束的记录" AutomationProperties.Name="清除已结束">
                           <c:StrokeIcon Data="{StaticResource Icon.Trash}" Width="13" Height="13"/>
                         </Button>
                       </Grid>
@@ -122,9 +140,12 @@
                                     <Button Grid.Column="2" Grid.RowSpan="2" Classes="flat" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" ToolTip.Tip="取消" VerticalAlignment="Top">
                                       <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="11" Height="11"/>
                                     </Button>
-                                    <TextBlock Grid.Column="1" Grid.Row="1" FontSize="11" Classes="dim" TextTrimming="CharacterEllipsis">
-                                      <Run Text="{Binding StateText}"/><Run Text="  "/><Run Text="{Binding AmountText}"/>
-                                    </TextBlock>
+                                    <DockPanel Grid.Column="1" Grid.Row="1" HorizontalSpacing="8">
+                                      <TextBlock DockPanel.Dock="Right" FontFeatures="tnum" FontSize="11" IsVisible="{Binding HasSpeed}" Text="{Binding SpeedText}"/>
+                                      <TextBlock FontSize="11" Classes="dim" TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding StateText}"/><Run Text="  "/><Run Text="{Binding AmountText}"/><Run Text="  "/><Run Text="{Binding RemainingText}"/>
+                                      </TextBlock>
+                                    </DockPanel>
                                     <ProgressBar Grid.Column="1" Grid.ColumnSpan="2" Grid.Row="2" Classes="thin" Margin="0,5,0,0" Minimum="0" Maximum="100" Value="{Binding Percent}" IsVisible="{Binding HasProgress}"/>
                                   </Grid>
                                 </Border>
@@ -155,13 +176,18 @@
                     <StackPanel Orientation="Horizontal" Spacing="1">
                       <c:StrokeIcon Data="{StaticResource Icon.ChevronRight}" Width="9" Height="9" Thickness="2.2" Opacity="0.6"/>
                       <Button Classes="crumb" Content="{Binding Name}" FontSize="12.5" ToolTip.Tip="{Binding FullPath}"
-                              Command="{Binding $parent[UserControl].((vm:WorkspaceViewModel)DataContext).NavigateCommand}" CommandParameter="{Binding}"/>
+                              Command="{Binding #FilesBody.((vm:WorkspaceViewModel)DataContext).NavigateCommand}" CommandParameter="{Binding}"/>
                     </StackPanel>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </StackPanel>
           </ScrollViewer>
+
+          <!-- the linked file session is gone -->
+          <Border Name="LinkedSourceLost" DockPanel.Dock="Bottom" IsVisible="{Binding IsLinkedSourceLost}" Background="{DynamicResource St.Notice}" Padding="8,5" Margin="6,0,6,6" CornerRadius="5">
+            <TextBlock TextWrapping="Wrap" FontSize="11.5" Text="{Binding Status}"/>
+          </Border>
 
           <!-- action result -->
           <Border DockPanel.Dock="Bottom" Classes="reveal" IsVisible="{Binding HasFileNotice}" Background="{DynamicResource St.Card}" Padding="8,5" Margin="6,0,6,6" CornerRadius="5">
@@ -249,6 +275,13 @@
             </Border>
             <StackPanel IsVisible="{Binding HasFileMessage}" Margin="14,8" Spacing="10">
               <TextBlock Text="{Binding FileMessage}" TextWrapping="Wrap" Classes="dim"/>
+              <Button Name="OfferLink" Classes="secondary" IsVisible="{Binding OffersLink}" HorizontalAlignment="Left" ToolTip.Tip="在这里显示另一个已打开的 xftp / SFTP / FTP 会话的文件">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <c:StrokeIcon Data="{StaticResource Icon.Chain}" Width="13" Height="13" Thickness="1.8"/>
+                  <TextBlock Text="关联已打开的文件会话"/>
+                </StackPanel>
+                <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedLeft"/></Button.Flyout>
+              </Button>
               <Button Classes="secondary" Content="输入绝对目录" Command="{Binding EnterDirectoryCommand}" IsVisible="{Binding NeedsDirectory}" HorizontalAlignment="Left"/>
               <StackPanel IsVisible="{Binding ShowReportInFiles}" Spacing="10">
                 <StackPanel IsVisible="{Binding HasServerNotice}" Spacing="4">
@@ -409,7 +442,7 @@
           <Border Classes="pane-chip">
             <StackPanel Orientation="Horizontal" Spacing="5">
               <TextBlock Classes="chip-text" Text="监控"/>
-              <Button Classes="chip-close" Command="{Binding HideMonitorCommand}" ToolTip.Tip="收起此栏">
+              <Button Classes="chip-close collapse" Command="{Binding HideMonitorCommand}" ToolTip.Tip="收起此栏（会话不断开）" AutomationProperties.Name="收起监控栏">
                 <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="9" Height="9" Thickness="2.6"/>
               </Button>
             </StackPanel>

@@ -107,12 +107,19 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         showTerminal = kind is WorkspaceKind.Terminal or WorkspaceKind.Local or WorkspaceKind.Telnet;
         showMonitor = kind == WorkspaceKind.Terminal && Appearance.Current.OpenMonitor;
         if (CanShowFiles) Appearance.Changed += OnPreferences;
+        CenterTabs.CollectionChanged += (_, _) => RaiseTab();
         ToggleFilesCommand = new RelayCommand(() => ShowFiles = !ShowFiles, () => CanShowFiles);
         ToggleTerminalCommand = new RelayCommand(() => ShowTerminal = !ShowTerminal, () => CanShowTerminal);
         ToggleMonitorCommand = new RelayCommand(() => ShowMonitor = !ShowMonitor, () => CanShowMonitor);
-        HideFilesCommand = new RelayCommand(() => ShowFiles = false);
-        HideTerminalCommand = new RelayCommand(() => ShowTerminal = false);
-        HideMonitorCommand = new RelayCommand(() => ShowMonitor = false);
+        HideFilesCommand = new RelayCommand(() => { ShowFiles = false; CloseGuard.Moved(); });
+        HideTerminalCommand = new RelayCommand(() =>
+        {
+            ShowTerminal = false;
+            CloseGuard.Moved();
+            // The × looks like the end of the session, and is not.
+            if (HasShell) interaction.Toast(new ToastMessage(ToastKind.Info, "终端栏已收起，会话没有断开", "恢复", () => { if (disposed == 0) ShowTerminal = true; }));
+        });
+        HideMonitorCommand = new RelayCommand(() => { ShowMonitor = false; CloseGuard.Moved(); });
         AddTerminalCommand = new AsyncCommand(async () => await AddTerminalAsync(), e => Status = "新建终端失败：" + Short(e.Message));
         DismissFileNoticeCommand = new RelayCommand(() => FileNotice = "");
         CopyReportCommand = new AsyncCommand(CopyReportAsync, e => Status = "复制失败：" + Short(e.Message));
@@ -216,7 +223,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         if (ReferenceEquals(activeTerminal, tab)) { activeTerminal = Terminals.LastOrDefault(); Raise(nameof(ActiveTerminal)); Raise(nameof(Terminal)); }
         RemoveCenterTab(tab);
         tab.Dispose();
-        Raise(nameof(HasShell));
+        Raise(nameof(HasShell)); RaiseTab();
     }
 
     void RemoveCenterTab(CenterTabViewModel tab)
@@ -224,6 +231,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         int index = CenterTabs.IndexOf(tab);
         if (index < 0) return;
         CenterTabs.RemoveAt(index);
+        CloseGuard.Moved();
         if (ReferenceEquals(activeTab, tab)) ActiveTab = CenterTabs.Count == 0 ? null : CenterTabs[Math.Min(index, CenterTabs.Count - 1)];
         if (CenterTabs.Count == 0) { showTerminal = false; Raise(nameof(ShowTerminal)); }
     }
@@ -234,14 +242,24 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     public async Task<EditorTabViewModel?> OpenEditorAsync(FileNodeViewModel node)
     {
         if (actions == null || node.IsDirectory || node.IsPlaceholder) return null;
-        var existing = Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
-        if (existing != null) { ShowCenter(); ActiveTab = existing; return existing; }
-        if (Editors.Count() >= MaxEditors) throw new IOException($"最多同时打开 {MaxEditors} 个文件，请先关闭已保存的文件");
+        // The editor opens where the files are shown; it stays with the source it came from.
+        var desk = Desk;
+        var existing = desk.Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
+        if (existing != null) { desk.ShowCenter(); desk.ActiveTab = existing; return existing; }
+        if (desk.Editors.Count() >= MaxEditors) throw new IOException($"最多同时打开 {MaxEditors} 个文件，请先关闭已保存的文件");
         var document = await actions.OpenTextAsync(node, lifetime.Token);
         if (disposed != 0) return null;
-        existing = Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
-        if (existing != null) { ShowCenter(); ActiveTab = existing; return existing; }
+        // Linked, or no longer, while it was read.
+        if (!ReferenceEquals(desk, Desk) && desk.disposed != 0) desk = Desk;
+        existing = desk.Editors.FirstOrDefault(e => e.Source.SourceId == actions.Source.SourceId && e.Path == node.Path);
+        if (existing != null) { desk.ShowCenter(); desk.ActiveTab = existing; return existing; }
         var editor = new EditorTabViewModel(document, Title, queue!, interaction, (id, kind) => Transfers?.Register(id, kind), path => Dispatcher.UIThread.Post(() => _ = ReloadDirectoryAsync(path)));
+        desk.Show(editor);
+        return editor;
+    }
+
+    void Show(EditorTabViewModel editor)
+    {
         editor.SavePreferences = change => SavePreferences?.Invoke(change);
         editor.ActivateCommand = new RelayCommand(() => ActiveTab = editor);
         editor.CloseCommand = new AsyncCommand(async () => { if (await editor.ConfirmCloseAsync()) { RemoveCenterTab(editor); editor.Dispose(); Raise(nameof(HasUnsavedEditors)); } });
@@ -249,7 +267,6 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         CenterTabs.Add(editor);
         ShowCenter();
         ActiveTab = editor;
-        return editor;
     }
 
     void ShowCenter()
@@ -262,18 +279,22 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     int ActiveTransfers => queue?.Snapshot().Count(s => s.State is TransferState.Queued or TransferState.Running or TransferState.Verifying or TransferState.Committing) ?? 0;
 
     /// <summary>True when closing would discard drafts or cancel queued/running transfers.</summary>
-    public bool NeedsCloseConfirmation => Editors.Any(e => e.IsDirty || e.IsSaving) || ActiveTransfers > 0;
+    public bool NeedsCloseConfirmation => Editors.Any(e => e.IsDirty || e.IsSaving) || ActiveTransfers > 0 || DraftsElsewhere.Any();
 
     /// <summary>Before closing the workspace (tab or window): unsaved drafts and queued or running
-    /// transfers need explicit confirmation; a save in progress must finish first.</summary>
-    public async Task<bool> ConfirmCloseAsync()
+    /// transfers need explicit confirmation; a save in progress must finish first. <paramref name="all"/>: everything is
+    /// being closed, and each session speaks for the drafts it shows.</summary>
+    public async Task<bool> ConfirmCloseAsync(bool all = false)
     {
         var unsaved = Editors.Where(e => e.IsDirty || e.IsSaving).ToList();
+        var elsewhere = all ? [] : DraftsElsewhere.ToList();
+        if (elsewhere.Any(e => e.IsSaving)) { Status = "有文件正在保存，请等待结果或在传输管理中取消。"; return false; }
         if (unsaved.Any(e => e.IsSaving)) { Status = "有文件正在保存，请等待结果或在传输管理中取消。"; return false; }
         int active = ActiveTransfers;
-        if (unsaved.Count == 0 && active == 0) return true;
+        if (unsaved.Count == 0 && active == 0 && elsewhere.Count == 0) return true;
         var parts = new List<string>();
         if (unsaved.Count > 0) parts.Add("以下内存草稿未保存，将无法恢复：\n" + string.Join("\n", unsaved.Select(e => e.Path)));
+        if (elsewhere.Count > 0) parts.Add("以下草稿在关联的会话里打开，关闭后变为只读、不能再保存：\n" + string.Join("\n", elsewhere.Select(e => e.Path)));
         if (active > 0) parts.Add($"{active} 个传输或操作仍在排队或进行，关闭会取消它们（已完成的不回滚）。");
         return await interaction.ConfirmAsync($"关闭“{Title}”？", string.Join("\n\n", parts), "关闭", danger: true);
     }
@@ -363,7 +384,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     };
     public bool HasFiles => actions != null;
     internal FileActions? Actions => actions;
-    public bool CanUseTerminalFromFiles => session != null && CanAddTerminal;
+    public bool CanUseTerminalFromFiles => Desk is { session: not null, CanAddTerminal: true };
     public bool NeedsDirectory { get => needsDirectory; private set => Set(ref needsDirectory, value); }
 
     public string Status { get => status; internal set => Set(ref status, value); }
@@ -372,8 +393,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     /// <summary>Result of the last file action (queued, refused, failed).</summary>
     public string FileNotice { get => fileNotice; private set { if (Set(ref fileNotice, value)) Raise(nameof(HasFileNotice)); } }
     public bool HasFileNotice => FileNotice.Length > 0;
-    public bool IsConnected { get => connected; private set { if (!Set(ref connected, value)) return; Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles)); RaiseIdle(); } }
-    public bool IsBusy { get => busy; private set => Set(ref busy, value); }
+    public bool IsConnected { get => connected; private set { if (!Set(ref connected, value)) return; Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles)); Raise(nameof(IsLinkedSourceLost)); RaiseIdle(); } }
+    public bool IsBusy { get => busy; private set { if (!Set(ref busy, value)) return; Raise(nameof(OffersLink)); Raise(nameof(IsLinkedSourceLost)); } }
 
     public bool CanShowFiles => Kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp or WorkspaceKind.Ftp;
     /// <summary>The centre column holds terminals and editors; FTP workspaces use it for editors only.</summary>
@@ -670,7 +691,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         tab.Owned = connection;
         tab.Attach(attached, connection as IImmediateInput);
         RaiseIdle();
-        Raise(nameof(HasShell));
+        Raise(nameof(HasShell)); RaiseTab();
         Raise(nameof(ShowTerminalOverlay)); Raise(nameof(ShowReportInFiles));
         string writes = follow ? Osc7Sniffer.ShellHook : "";
         bool first = !firstAttached;
@@ -776,6 +797,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         actions = new FileActions(source, queue!, interaction, list, path => Dispatcher.UIThread.Post(() => _ = ReloadDirectoryAsync(path)), Title, session);
         actions.Queued += (id, kind) => Transfers?.Register(id, kind);
         Raise(nameof(HasFiles));
+        Raise(nameof(OffersLink));
     }
 
     string StartPath(string fallback) => settings.DefaultPath.StartsWith('/') ? settings.DefaultPath.TrimEnd('/') is { Length: > 0 } p ? p : "/" : fallback;
@@ -1046,6 +1068,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         foreach (var tab in CenterTabs) tab.Dispose();
         CenterTabs.Clear();
         Terminals.Clear();
+        EndLinks();
         Monitor?.Dispose();
         Transfers?.Dispose();
         queue?.Dispose();

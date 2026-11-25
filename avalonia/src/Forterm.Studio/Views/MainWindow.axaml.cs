@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
 {
     public MainWindow()
     {
+        CloseGuard.Register();
         AvaloniaXamlLoader.Load(this);
         WindowDecorationsTheme = (ControlTheme)Resources["StudioDecorations"]!;
         if (Screens.Primary is { } screen) FitTo(screen.WorkingArea, screen.Scaling);

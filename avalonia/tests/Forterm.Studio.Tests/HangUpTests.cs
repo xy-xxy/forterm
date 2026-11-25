@@ -357,10 +357,11 @@ public sealed class SshTraceTests
         var trace = new SshTrace();
         var logger = ((Microsoft.Extensions.Logging.ILoggerFactory)trace).CreateLogger("Renci.SshNet.Session");
         for (int i = 0; i < 5000; i++) Message(trace, false, "SSH_MSG_CHANNEL_DATA", 94, "SSH_MSG_CHANNEL_DATA : #0");
+        // Data is one line as long as nothing else is between, whatever the channel and the direction.
+        for (int i = 0; i < 5000; i++) Message(trace, i % 2 == 0, i % 3 == 0 ? "SSH_MSG_CHANNEL_WINDOW_ADJUST" : "SSH_MSG_CHANNEL_DATA", 94, "SSH_MSG_CHANNEL_DATA : #" + i);
+        Assert.Contains("↔ 通道数据 ×10000", Report(trace));
+        for (int i = 0; i < 5000; i++) Message(trace, i % 2 == 0, "SSH_MSG_CHANNEL_CLOSE", 97, "SSH_MSG_CHANNEL_CLOSE : #" + i);
         Assert.True(logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Trace));
-        Assert.Contains("CHANNEL_DATA(94) 通道0 ×5000", Report(trace));
-        for (int i = 0; i < 5000; i++) Message(trace, i % 2 == 0, "SSH_MSG_CHANNEL_DATA", 94, "SSH_MSG_CHANNEL_DATA : #" + i);
-        Assert.False(logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Trace));
         Assert.True(logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Information));
         Assert.False(logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug));
         Message(trace, false, "SSH_MSG_USERAUTH_BANNER", 53, "SSH_MSG_USERAUTH_BANNER " + new string('字', 9000));
@@ -370,8 +371,12 @@ public sealed class SshTraceTests
         Say(trace, "[{SessionId}] Disconnecting session.");
         Assert.Contains("强行重置", trace.Explanation);
         string report = Report(trace);
-        Assert.InRange(report.Split('\n').Length, 100, SshTrace.Most + 20);
-        Assert.Contains("之后的消息不再记录", report);
+        Assert.InRange(report.Split('\n').Length, 100, SshTrace.MostFirst + SshTrace.MostLast + 20);
+        // How it began, what came last, and how much is missing between them.
+        Assert.Contains("CHANNEL_CLOSE(97) 通道0", report);
+        Assert.Contains("CHANNEL_CLOSE(97) 通道4999", report);
+        Assert.DoesNotContain("通道2500", report);
+        Assert.Contains("中间省略 " + (5000 + 1 + 1 - SshTrace.MostFirst - SshTrace.MostLast) + " 行", report);
         Assert.EndsWith("没有包含：地址、用户名、密码、票据、终端内容、文件名。", report);
     }
 
