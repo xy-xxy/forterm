@@ -165,6 +165,23 @@ public sealed class LinkTests
     }
 
     [AvaloniaFact]
+    public async Task AfterAClosedSessionComesTheNextTab()
+    {
+        using var s = new Setup();
+        var terminal = await s.Terminal("甲");
+        var closed = await s.Terminal("乙");
+        var files = await s.Xftp();
+        var next = await s.Terminal("丁");
+        terminal.Link(files);
+        s.Model.Selected = closed;
+        s.Model.Close(closed);
+        // Not the file session in between, nor the one that shows it.
+        Assert.Same(next, s.Model.Selected);
+        s.Model.Close(next);
+        Assert.Same(terminal, s.Model.Selected);
+    }
+
+    [AvaloniaFact]
     public async Task TheTabComesBackWithTheLastLink()
     {
         using var s = new Setup();
@@ -354,6 +371,17 @@ public sealed class LinkTests
             s.Model.Selected = terminal; Settle(window);
             tree = window.GetVisualDescendants().OfType<TreeView>().Single(t => t.Name == "FileTree" && t.IsEffectivelyVisible);
             Assert.Equal("a", (tree.SelectedItem as FileNodeViewModel)?.Name);
+            // Chosen by the program, in a directory that is not open on the screen.
+            s.Files.Command("seed-tree");
+            s.Model.Selected = s.Model.Home; Settle(window);
+            var a = Row(files, "a");
+            a.IsExpanded = true;
+            await Pump(() => a.Children.Any(c => c.Name == "nested"));
+            a.IsExpanded = false;
+            s.Model.Selected = terminal; Settle(window);
+            tree = window.GetVisualDescendants().OfType<TreeView>().Single(t => t.Name == "FileTree" && t.IsEffectivelyVisible);
+            files.SelectedNode = a.Children.First(c => c.Name == "nested");
+            Assert.Same(files.SelectedNode, tree.SelectedItem);
             files.NavigateRootCommand.Execute(null); Settle(window);
             Assert.Null(tree.SelectedItem);
             window.CaptureRenderedFrame()!.Save(Path.Combine(Paths.Evidence, "link-shown.png"));
@@ -385,7 +413,14 @@ public sealed class LinkTests
         var terminal = await s.Terminal();
         Assert.True(terminal.HasFiles);
         Assert.False(terminal.OffersLink);
+        // Not those of another terminal session: it keeps them, and its tab.
+        var other = await s.Terminal("另一个");
+        Assert.True(other.HasFiles);
+        Assert.Empty(terminal.LinkChoices);
+        terminal.Link(other);
+        Assert.Same(terminal, terminal.FileView);
         var files = await s.Xftp();
+        Assert.Equal([files], terminal.LinkChoices);
         terminal.Link(files);
         Assert.Same(files, terminal.FileView);
         terminal.Unlink();
@@ -429,6 +464,9 @@ public sealed class CloseGuardTests
             // The keys are the terminal's again.
             Assert.True(w.Terminal!.IsKeyboardFocusWithin);
             Click(window, at);
+            Click(window, at);
+            // The second click of a double click, however slow the machine was in between.
+            CloseGuard.ForgetForTest();
             Click(window, at);
             Assert.True(w.ShowTerminal);
             Assert.True(w.HasShell);

@@ -109,14 +109,16 @@ public sealed class TransferSpeedTests
         At(12.5, 40 * MB, "校验内容");
         Assert.Equal("", item.SpeedText);
         Assert.Equal("", list.DownloadSpeed);
+        // The next file of a folder, after a long check: as fast as it is, and the check is not part of the average.
+        At(50, 40 * MB); At(51, 40 * MB + 100); At(51.5, 40 * MB, "校验内容");
         clock.Now = S(60);
         step.Release();
         await ticket.Completion;
         for (int i = 0; i < 50 && item.IsActive; i++) { Dispatcher.UIThread.RunJobs(); await Task.Delay(10); }
         list.Refresh();
         Assert.True(item.IsDone);
-        // 40 MB in the 12.5 seconds in which bytes moved; the 47 seconds of checking are not among them.
-        Assert.Equal("平均 3.2 MB/s", item.SpeedText);
+        // 40 MB in the 13.5 seconds in which bytes moved; the 46 seconds of checking are not among them.
+        Assert.Equal("平均 3.0 MB/s", item.SpeedText);
         Assert.Equal("", item.RemainingText);
         Assert.Equal("", list.DownloadSpeed);
     }
@@ -139,6 +141,9 @@ public sealed class TransferSpeedTests
         Assert.Equal(2, list.Visible.Count);
         clock.Now = S(1); report!.Report(new(1, 4, "已删除 1/4", "项")); list.Refresh();
         clock.Now = S(2); report!.Report(new(3, 4, "已删除 3/4", "项")); list.Refresh();
+        // Nor when it counts bytes (packing on the server).
+        clock.Now = S(3); report!.Report(new(1000, null, "服务器打包中")); list.Refresh();
+        clock.Now = S(4); report!.Report(new(900_000, null, "服务器打包中")); list.Refresh();
         Assert.All(list.Visible, i => Assert.False(i.HasSpeed));
         var rows = list.Visible.ToArray();
         int changes = 0;
@@ -149,7 +154,7 @@ public sealed class TransferSpeedTests
         // The one that has ended goes below the one that runs; nothing else is touched.
         Assert.Equal(1, changes);
         changes = 0;
-        for (int i = 1; i <= 20; i++) { clock.Now = S(2 + i * 0.5); report!.Report(new(i * MB, 100 * MB, "传输中")); list.Refresh(); }
+        for (int i = 1; i <= 20; i++) { clock.Now = S(4 + i * 0.5); report!.Report(new(i * MB, 100 * MB, "传输中")); list.Refresh(); }
         Assert.Equal(0, changes);
         Assert.Equal([rows[1], rows[0]], list.Visible);
         Assert.Equal("2.0 MB/s", list.UploadSpeed);
