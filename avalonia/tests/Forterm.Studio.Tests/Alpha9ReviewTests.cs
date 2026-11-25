@@ -389,7 +389,18 @@ public sealed class Alpha9ReviewTests
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         var served = Task.Run(async () =>
         {
-            try { using var c = await listener.AcceptTcpClientAsync(); await c.GetStream().WriteAsync(Encoding.ASCII.GetBytes(answer)); await Task.Delay(500); }
+            try
+            {
+                using var c = await listener.AcceptTcpClientAsync();
+                var stream = c.GetStream();
+                await stream.WriteAsync(Encoding.ASCII.GetBytes(answer));
+                // The answer is complete; what the client said is read before closing. Closed unread, Windows resets the
+                // connection, and the client would rightly say so.
+                c.Client.Shutdown(SocketShutdown.Send);
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var buffer = new byte[4096];
+                try { while (await stream.ReadAsync(buffer, limit.Token) > 0) { } } catch (Exception) { }
+            }
             finally { listener.Stop(); }
         });
         return (port, served);
