@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Channels;
 using Avalonia;
+using Avalonia.Media;
 using Forterm.Core;
 
 namespace Forterm.Studio;
@@ -88,5 +89,13 @@ internal static class Program
     static string PatchId(Assembly assembly) =>
         assembly.GetCustomAttributes<AssemblyMetadataAttribute>().SingleOrDefault(a => a.Key == "FortermPatchId")?.Value ?? "";
 
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect().With(Fonts(OperatingSystem.IsWindows())).LogToTrace();
+
+    /// <summary>Windows: Chinese text that the font in use does not have comes from the font for simplified Chinese. Left
+    /// to the system it may be one for traditional Chinese or Japanese, with other forms and punctuation.</summary>
+    internal static FontManagerOptions Fonts(bool windows) => new()
+    {
+        FontFallbacks = !windows ? null : new[] { "Microsoft YaHei UI", "Microsoft YaHei", "SimSun" }
+            .Select(f => new FontFallback { FontFamily = new FontFamily(f), UnicodeRange = UnicodeRange.Parse("U+2E80-2FDF, U+3000-303F, U+31C0-31EF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF") }).ToArray(),
+    };
 }

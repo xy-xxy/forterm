@@ -16,7 +16,29 @@ namespace Forterm.Studio.Views;
 
 public sealed partial class MainWindow : Window
 {
-    public MainWindow() { AvaloniaXamlLoader.Load(this); Wire(); WireInteraction(); }
+    public MainWindow()
+    {
+        AvaloniaXamlLoader.Load(this);
+        WindowDecorationsTheme = (ControlTheme)Resources["StudioDecorations"]!;
+        if (Screens.Primary is { } screen) FitTo(screen.WorkingArea, screen.Scaling);
+        Wire();
+        WireInteraction();
+    }
+
+    /// <summary>No larger than the screen (1440 x 860 is more than a small or much enlarged one has), and all of it on it.
+    /// The system's own choice of a place puts a large window partly outside.</summary>
+    internal void FitTo(PixelRect area, double scaling)
+    {
+        // What the system draws around a window that is not maximised.
+        const double Frame = 16;
+        double width = area.Width / scaling - Frame, height = area.Height / scaling - Frame;
+        if (width < 200 || height < 200) return; // no real screen
+        MinWidth = Math.Min(MinWidth, width);
+        MinHeight = Math.Min(MinHeight, height);
+        Width = Math.Min(Width, width);
+        Height = Math.Min(Height, height);
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+    }
 
     public static MainWindow Create(KnownHosts knownHosts, LibraryStore library, CredentialStore credentials, AccountStore? accounts = null, QuickCommandStore? quickCommands = null)
     {
@@ -33,13 +55,14 @@ public sealed partial class MainWindow : Window
 
     public Task<WorkspaceViewModel?> AcceptLaunchAsync(LaunchPlan plan) => ViewModel.AcceptLaunchAsync(plan);
 
+    /// <summary>Minimise, maximise and close, 45 each, and a little distance.</summary>
+    internal const double CaptionButtons = 3 * 45 + 5;
+
     void Wire()
     {
-        // Leave room for the system window buttons drawn over the extended title bar.
+        // Leave room for the system window buttons drawn over the extended title bar (set below: not scaled with the rest).
         var left = this.FindControl<Border>("LeftInset")!;
         var right = this.FindControl<Border>("RightInset")!;
-        if (OperatingSystem.IsMacOS()) left.Width = 76;
-        else if (OperatingSystem.IsWindows()) right.Width = 140;
 
         var titleBar = this.FindControl<Border>("TitleBar")!;
         titleBar.PointerPressed += (_, e) =>
@@ -67,6 +90,9 @@ public sealed partial class MainWindow : Window
         {
             scaler.LayoutTransform = Math.Abs(p.UiScale - 1) < 0.001 ? null : new Avalonia.Media.ScaleTransform(p.UiScale, p.UiScale);
             titleBar.Classes.Set("solid", p.TitleBarColor.Length > 0);
+            // The system's buttons do not grow and shrink with the rest.
+            left.Width = (OperatingSystem.IsMacOS() ? 76 : 8) / p.UiScale;
+            right.Width = (OperatingSystem.IsWindows() ? CaptionButtons : 8) / p.UiScale;
         }
         Scale(Appearance.Current);
         Appearance.Changed += Scale;

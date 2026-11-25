@@ -264,6 +264,61 @@ public sealed class Alpha9Tests
         Assert.True(again.Join(TimeSpan.FromSeconds(10)));
     }
 
+    /// <summary>Seen on Windows: a window larger than the screen, and its buttons over the settings.</summary>
+    [AvaloniaFact]
+    public void TheWindowFitsTheScreenAndLeavesRoomForItsButtons()
+    {
+        Appearance.Apply(new StudioPreferences());
+        using var h = new StudioHarness();
+        try
+        {
+            foreach (var (pixels, scaling, width, height) in new[] { (new PixelRect(0, 0, 1920, 1040), 1.0, 1440d, 860d), (new PixelRect(0, 0, 1920, 1032), 1.5, 1264d, 672d), (new PixelRect(0, 0, 1024, 720), 1.0, 1008d, 704d), (new PixelRect(0, 0, 1366, 720), 1.5, 910 - 15.333, 464d) })
+            {
+                var window = new MainWindow { DataContext = h.Model, Width = 1440, Height = 860 };
+                window.MinWidth = 960;
+                window.MinHeight = 600;
+                window.FitTo(pixels, scaling);
+                Assert.Equal(width, window.Width, 1.0);
+                Assert.Equal(height, window.Height, 1.0);
+                Assert.True(window.MinWidth <= window.Width && window.MinHeight <= window.Height);
+                Assert.Equal(WindowStartupLocation.CenterScreen, window.WindowStartupLocation);
+                window.FitTo(new PixelRect(0, 0, 0, 0), 1); // no screen: as it is
+                Assert.Equal(width, window.Width, 1.0);
+                window.Close();
+            }
+            // The room for the system's buttons is in real size, whatever the scale of the rest.
+            var shown = new MainWindow { DataContext = h.Model, Width = 1200, Height = 700 };
+            shown.Show();
+            foreach (double scale in new[] { 1.0, 1.5, 0.5 })
+            {
+                Appearance.Apply(new StudioPreferences { UiScale = scale });
+                Settle(shown);
+                string inset = OperatingSystem.IsMacOS() ? "LeftInset" : "RightInset";
+                double real = OperatingSystem.IsMacOS() ? 76 : OperatingSystem.IsWindows() ? MainWindow.CaptionButtons : 8;
+                Assert.Equal(real, shown.FindControl<Border>(inset)!.Width * scale, 0.5);
+            }
+            shown.Close();
+            // Neither the title nor "full screen" are drawn over the window's own title bar.
+            var theme = Assert.IsType<Avalonia.Styling.ControlTheme>(shown.WindowDecorationsTheme);
+            Assert.NotNull(theme.BasedOn);
+            var selectors = theme.Children.OfType<Avalonia.Styling.Style>().Select(x => x.Selector!.ToString()).ToList();
+            Assert.Contains(selectors, x => x.Contains("PART_TitleTextPanel", StringComparison.Ordinal));
+            Assert.Contains(selectors, x => x.Contains("PART_FullScreenButton", StringComparison.Ordinal));
+            Assert.True(MainWindow.CaptionButtons >= 3 * 45);
+        }
+        finally { Appearance.Apply(new StudioPreferences()); }
+    }
+
+    [Fact]
+    public void OnWindowsChineseComesFromAFontForSimplifiedChinese()
+    {
+        Assert.Null(Program.Fonts(windows: false).FontFallbacks);
+        var fallbacks = Program.Fonts(windows: true).FontFallbacks!;
+        Assert.StartsWith("Microsoft YaHei", fallbacks[0].FontFamily.Name);
+        foreach (int c in new[] { '终', '、', '。', '，', '（', '；' }) Assert.True(fallbacks[0].UnicodeRange.IsInRange(c), ((char)c).ToString());
+        Assert.False(fallbacks[0].UnicodeRange.IsInRange('a'));
+    }
+
     /// <summary>An installed entry without its program says so by its exit code; the message box is for Windows.</summary>
     [Fact]
     public void AnEntryNeverPutsItsArgumentsIntoAMessage()

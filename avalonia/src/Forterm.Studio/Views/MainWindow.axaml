@@ -10,6 +10,16 @@
         Width="1440" Height="860" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="36">
+  <!-- On Windows Avalonia draws the title and the window buttons over this window's own title bar: the title would lie on
+       the first icons, and a fourth button ("full screen") on the settings. The buttons that stay take RightInset. -->
+  <Window.Resources>
+    <ControlTheme x:Key="StudioDecorations" TargetType="WindowDrawnDecorations" BasedOn="{StaticResource {x:Type WindowDrawnDecorations}}">
+      <Setter Property="DefaultTitleBarHeight" Value="36"/>
+      <Style Selector="^ /template/ Panel#PART_TitleTextPanel"><Setter Property="IsVisible" Value="False"/></Style>
+      <Style Selector="^ /template/ Button#PART_FullScreenButton"><Setter Property="IsVisible" Value="False"/></Style>
+      <Style Selector="^ /template/ StackPanel#PART_OverlayPanel"><Setter Property="Spacing" Value="0"/></Style>
+    </ControlTheme>
+  </Window.Resources>
   <Window.DataTemplates>
     <DataTemplate DataType="vm:LibraryViewModel"><v:LibraryView/></DataTemplate>
     <DataTemplate DataType="vm:WorkspaceViewModel"><v:WorkspaceView/></DataTemplate>

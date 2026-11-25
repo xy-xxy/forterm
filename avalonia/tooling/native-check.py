@@ -58,6 +58,37 @@ def shot(name):
     if not windows: return
     script = "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $i=New-Object System.Drawing.Bitmap $b.Width,$b.Height; ([System.Drawing.Graphics]::FromImage($i)).CopyFromScreen($b.Left,$b.Top,0,0,$i.Size); $i.Save('" + str(out / (name + '.png')) + "')"
     subprocess.run(['powershell', '-NoProfile', '-Command', script], capture_output=True, timeout=60)
+# Windows only: the real mouse and keyboard, and where things are on the screen (UI Automation).
+UI = r'''
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.Encoding]::UTF8
+Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes,System.Windows.Forms
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class Native {
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr w);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr w);
+}
+"@
+[void][Native]::SetProcessDPIAware()
+$A=[System.Windows.Automation.AutomationElement]; $T=[System.Windows.Automation.TreeScope]
+function By($p,$v) { New-Object System.Windows.Automation.PropertyCondition($p,$v) }
+$process=Get-Process Forterm | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+function Windows { $A::RootElement.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id)) }
+$main=$A::FromHandle($process.MainWindowHandle)
+function Find($in,$name) { $in.FindFirst($T::Descendants,(By $A::NameProperty $name)) }
+function Click($x,$y,$times=1) { [void][Native]::SetCursorPos([int]$x,[int]$y); Start-Sleep -Milliseconds 150; for($i=0;$i -lt $times;$i++){ [Native]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [Native]::mouse_event(4,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 60 }; Start-Sleep -Milliseconds 900 }
+function ClickOn($e) { $r=$e.Current.BoundingRectangle; Click ($r.X+$r.Width/2) ($r.Y+$r.Height/2) }
+[void][Native]::SetForegroundWindow($process.MainWindowHandle); Start-Sleep -Milliseconds 500
+'''
+def ui(script):
+    import base64
+    code = base64.b64encode((UI + script).encode('utf-16-le')).decode()
+    done = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', code], capture_output=True, timeout=90)
+    return done.stdout.decode('utf-8', 'replace').strip() or 'ERROR ' + done.stderr.decode('utf-8', 'replace')[-400:]
 first = None
 try:
     first = subprocess.Popen([exe('xshell'), '-newtab', '合成演示', '-url', url], env=env); started.append(first)
@@ -78,6 +109,21 @@ try:
         check('keep-alive sends into each of the six after a minute', until(lambda: all(f.typed() == b' \x7f' for f in servers), 110), [f.typed() for f in servers])
     else:
         time.sleep(65); check('off: still nothing after a minute', all(f.typed() == b'' for f in servers), [f.typed() for f in servers])
+    if windows:
+        answer = ui("$w=$main.Current.BoundingRectangle; $s=[System.Windows.Forms.SystemInformation]::WorkingArea; \"$([int]$w.X) $([int]$w.Y) $([int]$w.Right) $([int]$w.Bottom) | $($s.X) $($s.Y) $($s.Right) $($s.Bottom)\"")
+        try: w, area = [[int(v) for v in part.split()] for part in answer.split('|')]; inside = w[0] >= area[0] - 9 and w[1] >= area[1] - 9 and w[2] <= area[2] + 9 and w[3] <= area[3] + 9
+        except Exception: inside = False
+        check('the whole window is on the screen', inside, answer)
+        before = [len(f.typed()) for f in servers]
+        answer = ui("ClickOn (Find $main '系统配置'); (Windows | ForEach-Object { $_.Current.Name }) -join '|'"); shot('settings')
+        check('the mouse opens the settings', '系统配置' in answer.split('|'), answer)
+        ui("foreach($x in Windows){ if($x.Current.NativeWindowHandle -ne $process.MainWindowHandle){ $x.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } }"); time.sleep(1)
+        answer = ui("$r=$main.Current.BoundingRectangle; $t=Find $main '系统配置'; Click ($t.Current.BoundingRectangle.X-120) ($r.Y+18) 2; $z=[Native]::IsZoomed($process.MainWindowHandle); Click ($t.Current.BoundingRectangle.X-120) ($r.Y+18) 1; \"$z\""); shot('maximised')
+        check('a double click on the title bar maximises', answer == 'True', answer)
+        # Into the terminal in front: text, Chinese, Enter.
+        answer = ui("$r=$main.Current.BoundingRectangle; Click ($r.X+$r.Width*0.5) ($r.Y+$r.Height*0.5); [System.Windows.Forms.SendKeys]::SendWait('echo ok{ENTER}'); Start-Sleep -Milliseconds 800; 'sent'")
+        arrived = until(lambda: any(f.typed()[n:] == b'echo ok\r' for f, n in zip(servers, before)), 8)
+        check('the keyboard reaches the terminal, and only that one', arrived and sum(len(f.typed()) - n for f, n in zip(servers, before)) == 8, [f.typed()[n:] for f, n in zip(servers, before)]); shot('typed')
     check('still running', first.poll() is None and len(programs()) == 1)
 finally:
     end_all()
