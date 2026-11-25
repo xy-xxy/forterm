@@ -15,7 +15,9 @@
   <Window.Resources>
     <ControlTheme x:Key="StudioDecorations" TargetType="WindowDrawnDecorations" BasedOn="{StaticResource {x:Type WindowDrawnDecorations}}">
       <Setter Property="DefaultTitleBarHeight" Value="36"/>
-      <Style Selector="^ /template/ Panel#PART_TitleTextPanel"><Setter Property="IsVisible" Value="False"/></Style>
+      <!-- Not IsVisible: the template sets that itself, which a style cannot change. -->
+      <Style Selector="^ /template/ Panel#PART_TitleTextPanel"><Setter Property="Opacity" Value="0"/></Style>
+      <Style Selector="^ /template/ Panel#PART_TitleTextPanel > TextBlock"><Setter Property="IsVisible" Value="False"/></Style>
       <Style Selector="^ /template/ Button#PART_FullScreenButton"><Setter Property="IsVisible" Value="False"/></Style>
       <Style Selector="^ /template/ StackPanel#PART_OverlayPanel"><Setter Property="Spacing" Value="0"/></Style>
     </ControlTheme>

@@ -298,12 +298,28 @@ public sealed class Alpha9Tests
                 Assert.Equal(real, shown.FindControl<Border>(inset)!.Width * scale, 0.5);
             }
             shown.Close();
-            // Neither the title nor "full screen" are drawn over the window's own title bar.
-            var theme = Assert.IsType<Avalonia.Styling.ControlTheme>(shown.WindowDecorationsTheme);
-            Assert.NotNull(theme.BasedOn);
-            var selectors = theme.Children.OfType<Avalonia.Styling.Style>().Select(x => x.Selector!.ToString()).ToList();
-            Assert.Contains(selectors, x => x.Contains("PART_TitleTextPanel", StringComparison.Ordinal));
-            Assert.Contains(selectors, x => x.Contains("PART_FullScreenButton", StringComparison.Ordinal));
+            // Neither the title nor "full screen" are drawn over the window's own title bar. The real template of Avalonia,
+            // which only a Windows window shows: in a style, "IsVisible" of the title's panel would change nothing.
+            foreach (bool ours in new[] { false, true })
+            {
+                var decorations = new Avalonia.Controls.Chrome.WindowDrawnDecorations { Title = "标题文字" };
+                decorations.Theme = ours ? shown.WindowDecorationsTheme : shown.WindowDecorationsTheme!.BasedOn;
+                ((ISetLogicalParent)decorations).SetParent(shown);
+                var parts = typeof(Avalonia.Controls.Chrome.WindowDrawnDecorations).GetProperty("EnabledParts", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                parts.SetValue(decorations, Enum.Parse(parts.PropertyType, "All"));
+                decorations.ApplyStyling();
+                typeof(Avalonia.Controls.Chrome.WindowDrawnDecorations).GetMethod("ApplyTemplate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(decorations, null);
+                var overlay = (Control)decorations.Content!.Overlay!;
+                var host = new Window { Width = 600, Height = 80, Content = overlay };
+                host.Show();
+                Settle(host);
+                bool Seen(Visual? v) { for (; v != null && v != host; v = v.GetVisualParent()) if (!v.IsVisible || v.Opacity < 0.01) return false; return true; }
+                var title = host.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Text == "标题文字").ToList();
+                var buttons = host.GetVisualDescendants().OfType<Button>().ToDictionary(b => b.Name!);
+                Assert.Equal(!ours, title.Any(Seen));
+                if (ours) Assert.False(Seen(buttons["PART_FullScreenButton"]));
+                host.Close();
+            }
             Assert.True(MainWindow.CaptionButtons >= 3 * 45);
         }
         finally { Appearance.Apply(new StudioPreferences()); }
