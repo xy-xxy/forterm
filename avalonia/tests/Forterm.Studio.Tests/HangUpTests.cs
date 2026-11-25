@@ -79,6 +79,8 @@ public sealed class HangUpTests
         Assert.Equal(1, stats.GetProperty("connections").GetInt32());
         Assert.Equal(1, stats.GetProperty("auth").GetInt32());
         Assert.InRange(stats.GetProperty("opens").GetArrayLength(), 0, 1);
+        // Nor is a second channel asked for on a connection that is gone.
+        Assert.InRange(workspace.Report().Split("→ CHANNEL_OPEN(90)").Length - 1, 0, 1);
         Assert.Contains("没有连上", h.Model.Access.WakeUps[0].Result);
         Assert.True(workspace.ShowReport);
         Assert.Equal(entry == "xftp", workspace.ShowReportInFiles);
@@ -87,13 +89,13 @@ public sealed class HangUpTests
     [AvaloniaFact]
     public async Task WhatTheServerSaysWhenItHangsUpIsShownAndNotCopied()
     {
-        string text = "ticket " + Ticket + " of synthetic for 198.51.100.7 is used up‮\r\nbye";
+        string text = "ticket " + Ticket + " of synthetic for 198.51.100.7 is used up\u202e\r\nbye";
         using var server = Server("disconnect-on-open", text, "Welcome " + Ticket + "\r\nCall the operator: 12345");
         using var h = new StudioHarness();
         var workspace = await Open(h, server);
         Assert.Contains("服务器断开了连接，代码 11", workspace.Status);
         Assert.Contains("is used up bye", workspace.Status);
-        Assert.DoesNotContain('‮', workspace.Status);
+        Assert.DoesNotContain('\u202e', workspace.Status);
         Assert.Equal("Welcome " + Ticket + "\nCall the operator: 12345", workspace.ServerNotice);
         Assert.True(workspace.HasServerNotice);
         workspace.CopyReportCommand.Execute(null);
@@ -173,6 +175,51 @@ public sealed class HangUpTests
         using var shell = await session.OpenShellAsync(80, 24, CancellationToken.None);
         Assert.Equal([65536], old.Stats().GetProperty("opens").EnumerateArray().Select(o => o.GetProperty("packet").GetInt32()));
         Assert.Equal("", Assert.Single(old.Stats().GetProperty("ptyModes").EnumerateArray()).GetString());
+        using var held = await session.OpenShellAsync(80, 24, CancellationToken.None, "xterm", [], flowControl: true);
+        Assert.Equal(["", ""], old.Stats().GetProperty("ptyModes").EnumerateArray().Select(m => m.GetString()!));
+    }
+
+    [AvaloniaFact]
+    public async Task ATerminalThatIsNotAllowedSaysWhyAndTheFilesStay()
+    {
+        using var server = LoopbackFixture.Ssh(new Dictionary<string, string> { ["FIXTURE_DENY_SHELL"] = "1" });
+        using var h = new StudioHarness();
+        var workspace = await Open(h, server);
+        Assert.True(workspace.IsConnected);
+        Assert.True(workspace.HasFiles);
+        Assert.Equal("已连接：文件可用，终端没有打开：服务器不允许启动终端", workspace.Status);
+        // Only one of the two: the session works, and the report is in the palette.
+        Assert.False(workspace.ShowReport);
+        Assert.True(workspace.CanReport);
+    }
+
+    [AvaloniaFact]
+    public async Task ASessionThatEndsUnseenIsToldOnce()
+    {
+        using var server = Server("close-on-open");
+        using var h = new StudioHarness();
+        var opening = h.Model.AcceptLaunchAsync(Launch(server));
+        h.Model.ShowHomeCommand.Execute(null);
+        var workspace = (await opening)!;
+        Assert.False(workspace.IsActive);
+        await Task.Delay(300);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(h.Interaction.Toasts, t => t.Text.Contains("的连接已断开"));
+    }
+
+    [AvaloniaFact]
+    public async Task ThereIsNoReportWithoutSsh()
+    {
+        using var server = LoopbackFixture.Ftp();
+        using var h = new StudioHarness();
+        var workspace = (await h.Model.AcceptLaunchAsync(LaunchPlan.Parse(["--entry=xftp", "-url", $"ftp://synthetic:synthetic-only@127.0.0.1:{server.Port}"])))!;
+        Assert.True(workspace.IsConnected);
+        Assert.False(workspace.CanReport);
+        h.Model.Selected = workspace;
+        h.Model.OpenPaletteCommand.Execute(null);
+        Assert.DoesNotContain(h.Model.Palette.Matches, e => e.Title == "复制连接诊断");
+        workspace.CopyReportCommand.Execute(null);
+        Assert.Equal("", h.Interaction.Clipboard);
     }
 
     [AvaloniaFact]

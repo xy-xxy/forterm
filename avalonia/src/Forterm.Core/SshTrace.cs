@@ -111,7 +111,7 @@ public sealed partial class SshTrace : ILoggerFactory
         {
             if (kept.Length == most) break;
             if (c == '\n') kept.Append(lines ? '\n' : ' ');
-            else if (c is '‪' or '‫' or '‬' or '‭' or '‮' or '⁦' or '⁧' or '⁨' or '⁩' or '‎' or '‏') continue;
+            else if (c is '\u202a' or '\u202b' or '\u202c' or '\u202d' or '\u202e' or '\u2066' or '\u2067' or '\u2068' or '\u2069' or '\u200e' or '\u200f') continue;
             else if (!char.IsControl(c)) kept.Append(c);
         }
         return kept.ToString().Trim();
