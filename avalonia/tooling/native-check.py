@@ -77,9 +77,11 @@ public static class Native {
 $A=[System.Windows.Automation.AutomationElement]; $T=[System.Windows.Automation.TreeScope]
 function By($p,$v) { New-Object System.Windows.Automation.PropertyCondition($p,$v) }
 $process=Get-Process Forterm | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-function Windows { $A::RootElement.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id)) }
+$C=[System.Windows.Automation.ControlType]
+# A window that belongs to another is below it.
+function Windows { $main.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::Window)) }
 $main=$A::FromHandle($process.MainWindowHandle)
-function Find($in,$name) { $in.FindFirst($T::Descendants,(By $A::NameProperty $name)) }
+function Find($in,$name,$type=$C::Button) { $in.FindFirst($T::Descendants,(New-Object System.Windows.Automation.AndCondition((By $A::NameProperty $name),(By $A::ControlTypeProperty $type)))) }
 function Click($x,$y,$times=1) { [void][Native]::SetCursorPos([int]$x,[int]$y); Start-Sleep -Milliseconds 150; for($i=0;$i -lt $times;$i++){ [Native]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [Native]::mouse_event(4,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 60 }; Start-Sleep -Milliseconds 900 }
 function ClickOn($e) { $r=$e.Current.BoundingRectangle; Click ($r.X+$r.Width/2) ($r.Y+$r.Height/2) }
 [void][Native]::SetForegroundWindow($process.MainWindowHandle); Start-Sleep -Milliseconds 500
@@ -117,7 +119,7 @@ try:
         before = [len(f.typed()) for f in servers]
         answer = ui("ClickOn (Find $main '系统配置'); (Windows | ForEach-Object { $_.Current.Name }) -join '|'"); shot('settings')
         check('the mouse opens the settings', '系统配置' in answer.split('|'), answer)
-        ui("foreach($x in Windows){ if($x.Current.NativeWindowHandle -ne $process.MainWindowHandle){ $x.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() } }"); time.sleep(1)
+        answer = ui("foreach($x in Windows){ $x.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close() }; Start-Sleep 1; @(Windows).Count"); check('and close them again', answer == '0', answer)
         answer = ui("$r=$main.Current.BoundingRectangle; $t=Find $main '系统配置'; Click ($t.Current.BoundingRectangle.X-120) ($r.Y+18) 2; $z=[Native]::IsZoomed($process.MainWindowHandle); Click ($t.Current.BoundingRectangle.X-120) ($r.Y+18) 1; \"$z\""); shot('maximised')
         check('a double click on the title bar maximises', answer == 'True', answer)
         # Into the terminal in front: text, Chinese, Enter.
