@@ -29,7 +29,7 @@ internal static class Program
     }
 
     internal static (InstanceBroker? Primary, bool Forwarded) StartBroker(string dataDirectory, string[] args, Func<string[], bool> accept) =>
-        InstanceBroker.StartAsync(InstanceBroker.ForDataDirectory(dataDirectory), args, accept, CancellationToken.None, acrossSessions: true).GetAwaiter().GetResult();
+        InstanceBroker.StartAsync(InstanceBroker.ForDataDirectory(dataDirectory), args, accept, CancellationToken.None, acrossSessions: true, queue: true).GetAwaiter().GetResult();
 
     [STAThread]
     public static int Main(string[] args)

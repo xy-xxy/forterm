@@ -52,6 +52,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     internal void IdleTick() { foreach (var w in Workspaces.ToArray()) w.IdleTick(); }
 
     public ToastCenter Toasts { get; } = new();
+    /// <summary>The entries for the controller, and what came through them.</summary>
+    public ControllerAccess Access { get; init; } = new();
     public PaletteViewModel Palette { get; }
     public ICommand OpenPaletteCommand { get; }
 
@@ -171,7 +173,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Opens the settings window at a category.</summary>
-    public void OpenSettings(string section) => interaction.ShowSettings(new SettingsViewModel(settingsDirectory, QuickCommands, library, interaction) { Section = section });
+    public void OpenSettings(string section) => interaction.ShowSettings(new SettingsViewModel(settingsDirectory, QuickCommands, library, interaction, Access) { Section = section });
 
     public LibraryViewModel Home { get; }
     public AccountStore Accounts { get; }
@@ -204,17 +206,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// ignored-and-continued; the password is cleared once the workspace has used it.</summary>
     public async Task<WorkspaceViewModel?> AcceptLaunchAsync(LaunchPlan plan)
     {
+        var wake = plan.Entry is "xshell" or "xftp" && !plan.Diagnose ? Access.Began(plan.Entry, DateTimeOffset.Now) : null;
         if (plan.Error.Length > 0)
         {
+            wake?.End("未建立连接：" + plan.Error, bad: true);
             Notice = "未建立连接：" + plan.Error + "。可使用 forterm-diagnose 查看脱敏参数报告。";
             if (plan.Connection != null) plan.Connection.Password = "";
             return null;
         }
-        if (plan.Diagnose || plan.Connection is not { } connection) return null;
+        if (plan.Diagnose || plan.Connection is not { } connection)
+        {
+            wake?.End("没有带连接地址，只打开了主界面", bad: true);
+            return null;
+        }
         var workspace = WorkspaceViewModel.ForLaunch(LaunchRouter.Route(connection), connection, interaction, knownHosts, options);
         Add(workspace);
         try { await workspace.ConnectAsync(connection); }
-        finally { connection.Password = ""; }
+        finally
+        {
+            connection.Password = "";
+            wake?.End(workspace.IsConnected ? "已连接" : "已打开会话，但没有连上（原因见会话底部）", bad: !workspace.IsConnected);
+        }
         return workspace;
     }
 

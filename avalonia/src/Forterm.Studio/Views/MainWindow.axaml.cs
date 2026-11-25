@@ -22,7 +22,7 @@ public sealed partial class MainWindow : Window
     {
         var window = new MainWindow();
         window.DataContext = new MainWindowViewModel(new DialogInteraction(() => window), knownHosts, library, credentials, accounts: accounts,
-            quickCommands: quickCommands, settingsDirectory: StudioPaths.DataDirectory);
+            quickCommands: quickCommands, settingsDirectory: StudioPaths.DataDirectory) { Access = ControllerAccess.Shared };
         return window;
     }
 

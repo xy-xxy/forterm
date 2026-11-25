@@ -6,7 +6,7 @@
         xmlns:sv="using:Forterm.Studio.Services"
         x:Class="Forterm.Studio.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Forterm"
+        Title="Forterm" Icon="avares://Forterm/Assets/forterm.ico"
         Width="1440" Height="860" MinWidth="960" MinHeight="600"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="36">

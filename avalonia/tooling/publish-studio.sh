@@ -26,6 +26,7 @@ for rid in $RIDS; do
   mv "$out/Forterm.Diagnose$ext" "$out/forterm-diagnose$ext"
   rm "$out/Forterm.Launcher$ext"
   find "$out" -name '*.pdb' -delete
+  [[ "$rid" == win-* ]] && cp packaging/README.txt "$out/README.txt"
   for entry in "Forterm$ext" "xshell$ext" "xftp$ext" "forterm-diagnose$ext"; do
     [ -f "$out/$entry" ] || { echo "missing entry $entry" >&2; exit 1; }
   done

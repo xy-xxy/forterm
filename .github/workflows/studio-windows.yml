@@ -3,6 +3,7 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   studio-windows:
     runs-on: windows-latest
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: avalonia
@@ -47,10 +48,38 @@ jobs:
           if ($bad.ExitCode -ne 2) { throw "xftp should forward exit code 2 for rejected arguments" }
           $diag = Start-Process "$out/forterm-diagnose.exe" -ArgumentList '-url', 'sftp://t:p@h:22' -Wait -PassThru -NoNewWindow
           if ($diag.ExitCode -ne 0) { throw "forterm-diagnose failed" }
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $out = "artifacts/studio-ci-win-x64"
+          Get-ChildItem $out -Recurse -Filter *.pdb | Remove-Item
+          Copy-Item packaging/README.txt $out
+          Copy-Item licenses "$out/licenses" -Recurse
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress | Out-Null }
+          $version = ([xml](Get-Content src/Forterm.Studio/Forterm.Studio.csproj)).Project.PropertyGroup.Version
+          "VERSION=$version" >> $env:GITHUB_ENV
+          python tooling/package-studio-windows.py $version --payload $out --output artifacts/Forterm-Studio-ci-setup.exe --makensis $nsis
+          if ($LASTEXITCODE -ne 0) { throw "the installer was not built" }
+          # Stands in for an earlier version: one file more.
+          Copy-Item $out artifacts/studio-ci-old -Recurse; Set-Content artifacts/studio-ci-old/old-only.txt 'of the version before'
+          python tooling/package-studio-windows.py 0.4.0-alpha.1 --payload artifacts/studio-ci-old --output artifacts/Forterm-Studio-ci-old-setup.exe --makensis $nsis
+          if ($LASTEXITCODE -ne 0) { throw "the earlier installer was not built" }
+      - name: Install, upgrade and remove it
+        shell: pwsh
+        timeout-minutes: 15
+        run: ./tooling/check-studio-installer.ps1 -Setup artifacts/Forterm-Studio-ci-setup.exe -OldSetup artifacts/Forterm-Studio-ci-old-setup.exe -Payload artifacts/studio-ci-win-x64 -Version $env:VERSION
+      - name: A real window, opened through the entries
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          tooling/fixture-venv/Scripts/python tooling/native-check.py --app artifacts/studio-ci-win-x64 --out ../test-results/studio/native --idle
+          if ($LASTEXITCODE -ne 0) { throw "native check failed" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Forterm-Studio-Windows-x64
           path: |
             avalonia/artifacts/studio-ci-win-x64/**
+            avalonia/artifacts/Forterm-Studio-ci-setup.exe
             test-results/studio/**

@@ -6,7 +6,7 @@
         xmlns:lib="using:Forterm.Studio.Library"
         x:Class="Forterm.Studio.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Title="系统配置" Width="860" Height="600" MinWidth="680" MinHeight="420"
+        Title="系统配置" Icon="avares://Forterm/Assets/forterm.ico" Width="860" Height="600" MinWidth="680" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource St.Dialog}">
   <Window.Styles>
@@ -86,6 +86,7 @@
         <Button Classes="nav" Classes.active="{Binding IsMonitor}" IsVisible="{Binding ShowMonitorSection}" Command="{Binding ShowSectionCommand}" CommandParameter="monitor" Content="监控阈值"/>
         <Button Classes="nav" Classes.active="{Binding IsKeys}" IsVisible="{Binding ShowKeysSection}" Command="{Binding ShowSectionCommand}" CommandParameter="keys" Content="快捷键"/>
         <Button Classes="nav" Classes.active="{Binding IsLocal}" IsVisible="{Binding ShowLocalSection}" Command="{Binding ShowSectionCommand}" CommandParameter="local" Content="本地终端"/>
+        <Button Classes="nav" Classes.active="{Binding IsAccess}" IsVisible="{Binding ShowAccessSection}" Command="{Binding ShowSectionCommand}" CommandParameter="access" Content="控制器接入"/>
         <Button Classes="nav" Classes.active="{Binding IsBackup}" IsVisible="{Binding ShowBackupSection}" Command="{Binding ShowSectionCommand}" CommandParameter="backup" Content="备份恢复"/>
         <Button Classes="nav" Classes.active="{Binding IsAbout}" IsVisible="{Binding ShowAboutSection}" Command="{Binding ShowSectionCommand}" CommandParameter="about" Content="关于与验证说明"/>
         <TextBlock Classes="hint" Text="没有匹配的设置" IsVisible="{Binding NoMatches}" Margin="12,8"/>
@@ -341,6 +342,55 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <TextBlock Classes="hint" Text="终端文字缩放用的是终端本来就占用的组合，不能改。另外：macOS 上第 1–9 个会话用 ⌘数字；在终端或编辑器上按住 Cmd（其他系统 Ctrl）滚动滚轮改变文字大小；鼠标中键关闭页签；文件列表里 F2 重命名、Delete 删除、F5 刷新、Enter 打开；编辑器里 Ctrl+G 跳到行、Ctrl+H（macOS ⌘⌥F）替换；可以把本机文件和文件夹拖到文件栏上传。"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 控制器接入 -->
+        <StackPanel IsVisible="{Binding IsAccess}">
+          <Border Classes="card" IsVisible="{Binding Shown[entries]}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="入口程序"/><TextBlock Classes="hint" Text="在控制器（SSO 或堡垒机客户端）里，把 Xshell、Xftp 的程序位置改成下面两个，参数不用改。它们要和 Forterm 主程序放在同一个文件夹，不能单独拷走。用安装包升级时位置不变；自己换了文件夹，就要在控制器里重新填一次。"/></StackPanel>
+                <Button Grid.Column="1" Classes="secondary" Content="打开所在文件夹" Command="{Binding OpenEntryFolderCommand}" VerticalAlignment="Top"/>
+              </Grid>
+              <ItemsControl ItemsSource="{Binding EntryPrograms}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="sv:EntryProgram">
+                    <StackPanel Spacing="4" Margin="0,0,0,8">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock FontSize="12.5"><Run Text="{Binding Title, Mode=OneTime}" FontWeight="SemiBold"/><Run Text="  "/><Run Text="{Binding Purpose, Mode=OneTime}"/></TextBlock>
+                        <TextBlock Grid.Column="1" Text="{Binding State, Mode=OneTime}" FontSize="12" Foreground="{DynamicResource St.Accent}" IsVisible="{Binding IsThere}"/>
+                      </Grid>
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding Path, Mode=OneTime}" IsReadOnly="True" FontSize="12" VerticalContentAlignment="Center" AutomationProperties.Name="{Binding Title}"/>
+                        <Button Grid.Column="1" Classes="secondary" Content="复制" Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).CopyEntryCommand}" CommandParameter="{Binding}"/>
+                      </Grid>
+                      <TextBlock Text="{Binding State, Mode=OneTime}" FontSize="12" Foreground="{DynamicResource St.Danger}" IsVisible="{Binding !IsThere}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="hint" Text="{Binding EntryStatus}" IsVisible="{Binding HasEntryStatus}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[wakes]}">
+            <StackPanel Spacing="8">
+              <TextBlock Classes="h" Text="最近的唤醒"/>
+              <TextBlock Classes="hint" Text="只记录本次运行以来的，不保存，不含地址、用户名和密码。" TextWrapping="Wrap"/>
+              <TextBlock Text="还没有。从控制器点一次连接，会显示在这里；如果一直没有，多半是控制器没有启动上面的程序，请核对它的设置。" IsVisible="{Binding !HasWakeUps}" FontSize="12.5" TextWrapping="Wrap"/>
+              <ItemsControl ItemsSource="{Binding WakeUps}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="sv:WakeUp">
+                    <Grid ColumnDefinitions="72,64,*" Margin="0,2">
+                      <TextBlock Text="{Binding Time, Mode=OneTime}" FontSize="12" Classes="dim" VerticalAlignment="Top"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Entry, Mode=OneTime}" FontSize="12" VerticalAlignment="Top"/>
+                      <TextBlock Grid.Column="2" Text="{Binding Result}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top" IsVisible="{Binding !IsFailed}"/>
+                      <TextBlock Grid.Column="2" Text="{Binding Result}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top" IsVisible="{Binding IsFailed}" Foreground="{DynamicResource St.Danger}"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
           </Border>
         </StackPanel>

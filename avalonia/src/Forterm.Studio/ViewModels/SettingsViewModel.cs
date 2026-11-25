@@ -138,7 +138,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
     public const string DefaultFont = "默认";
 
-    static readonly (string Key, string Title)[] SectionTitles = [("theme", "主题界面"), ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("editor", "编辑器"), ("files", "文件与传输"), ("layout", "布局"), ("monitor", "监控阈值"), ("keys", "快捷键"), ("local", "本地终端"), ("backup", "备份恢复"), ("about", "关于与验证说明")];
+    static readonly (string Key, string Title)[] SectionTitles = [("theme", "主题界面"), ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("editor", "编辑器"), ("files", "文件与传输"), ("layout", "布局"), ("monitor", "监控阈值"), ("keys", "快捷键"), ("local", "本地终端"), ("access", "控制器接入"), ("backup", "备份恢复"), ("about", "关于与验证说明")];
 
     public static readonly SettingEntry[] Entries =
     [
@@ -176,6 +176,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         new("widths", "layout", "栏宽", "布局 栏宽 宽度 恢复默认"),
         new("limits", "monitor", "监控阈值", "监控 阈值 磁盘 CPU 内存 负载 注意 严重 告警"),
         new("keys", "keys", "快捷键", "快捷键 键盘 命令面板 热键 按键 自定义"),
+        new("entries", "access", "入口程序", "控制器 接入 入口 xshell xftp 唤醒 路径 位置 堡垒机 SSO"),
+        new("wakes", "access", "最近的唤醒", "控制器 唤醒 记录 没反应"),
         new("backup", "backup", "备份", "备份 导出 保存 配置"),
         new("restore", "backup", "恢复", "恢复 还原 导入 配置"),
         new("shell", "local", "默认程序", "默认程序 shell zsh bash cmd powershell"),
@@ -200,11 +202,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     readonly LibraryStore? library;
     readonly IStudioInteraction? interaction;
 
-    public SettingsViewModel(string? directory, QuickCommandStore? quickCommands = null, LibraryStore? library = null, IStudioInteraction? interaction = null)
+    public SettingsViewModel(string? directory, QuickCommandStore? quickCommands = null, LibraryStore? library = null, IStudioInteraction? interaction = null, ControllerAccess? access = null)
     {
         this.directory = directory;
         this.library = library;
         this.interaction = interaction;
+        this.access = access ?? new ControllerAccess();
         quickStore = quickCommands;
         prefs = Appearance.Current;
         // Another settings window, or the title bar toggle, changes the same preferences.
@@ -257,6 +260,10 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         ResetThresholdsCommand = new RelayCommand(() => Commit(p0 => p0 with { Thresholds = new() }));
         Keys = Shortcuts.All.Select(x => new ShortcutItem(this, x)).ToArray();
         ResetKeysCommand = new RelayCommand(() => { EndCapture(); Commit(p0 => p0 with { Shortcuts = null }); });
+        EntryPrograms = this.access.Programs;
+        this.access.WakeUps.CollectionChanged += OnWakeUps;
+        CopyEntryCommand = new AsyncCommand<EntryProgram>(async e => { if (e != null && interaction != null) { await interaction.CopyTextAsync(e.Path); EntryStatus = "已复制：" + e.Path; } }, e => EntryStatus = "没有复制：" + WorkspaceViewModel.Short(e.Message));
+        OpenEntryFolderCommand = new AsyncCommand(async () => { if (interaction != null) await interaction.OpenFolderAsync(this.access.Folder); }, e => EntryStatus = "没有打开：" + WorkspaceViewModel.Short(e.Message));
         BackupCommand = new AsyncCommand(BackupAsync, e => BackupStatus = "没有备份：" + WorkspaceViewModel.Short(e.Message));
         OpenBackupCommand = new AsyncCommand(OpenBackupAsync, e => BackupStatus = "没有读取：" + WorkspaceViewModel.Short(e.Message));
         RestoreCommand = new AsyncCommand(RestoreAsync, e => BackupStatus = "没有完成恢复：" + WorkspaceViewModel.Short(e.Message));
@@ -305,7 +312,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref section, SectionTitles.Any(s => s.Key == value) ? value : "theme")) return;
             EndCapture();
-            foreach (string name in new[] { nameof(IsTheme), nameof(IsTerminal), nameof(IsHighlight), nameof(IsQuick), nameof(IsKeys), nameof(IsLocal), nameof(IsAbout), nameof(IsEditor), nameof(IsFiles), nameof(IsLayout), nameof(IsMonitor), nameof(IsBackup) }) Raise(name);
+            foreach (string name in new[] { nameof(IsTheme), nameof(IsTerminal), nameof(IsHighlight), nameof(IsQuick), nameof(IsKeys), nameof(IsLocal), nameof(IsAbout), nameof(IsEditor), nameof(IsFiles), nameof(IsLayout), nameof(IsMonitor), nameof(IsBackup), nameof(IsAccess) }) Raise(name);
         }
     }
     public bool IsHighlight => section == "highlight";
@@ -316,6 +323,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool IsLayout => section == "layout";
     public bool IsMonitor => section == "monitor";
     public bool IsBackup => section == "backup";
+    public bool IsAccess => section == "access";
     public bool IsTheme => section == "theme";
     public bool IsTerminal => section == "terminal";
     public bool IsLocal => section == "local";
@@ -337,7 +345,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 nameof(ShowThemeSection), nameof(ShowTerminalSection), nameof(ShowLocalSection), nameof(ShowAboutSection), nameof(NoMatches), nameof(IsSearching),
                 nameof(ShowPresets), nameof(ShowNavColor), nameof(ShowAccent), nameof(ShowFollow), nameof(ShowUiFont), nameof(ShowScale),
                 nameof(ShowTermFont), nameof(ShowTermSize), nameof(ShowScheme), nameof(ShowProtect), nameof(ShowShell), nameof(ShowShellArgs), nameof(ShowLocalTerm), nameof(ShowAbout),
-                nameof(Shown), nameof(ShowEditorSection), nameof(ShowFilesSection), nameof(ShowLayoutSection), nameof(ShowMonitorSection), nameof(ShowBackupSection),
+                nameof(Shown), nameof(ShowEditorSection), nameof(ShowFilesSection), nameof(ShowLayoutSection), nameof(ShowMonitorSection), nameof(ShowBackupSection), nameof(ShowAccessSection),
                 nameof(ShowHighlightSection), nameof(ShowQuickSection), nameof(ShowKeysSection), nameof(ShowMotion), nameof(ShowCursor), nameof(ShowScrollback), nameof(ShowRightClick), nameof(ShowPaste), nameof(ShowCopySelect), nameof(ShowRecord),
             }) Raise(name);
         }
@@ -364,6 +372,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool ShowLayoutSection => SectionHas("layout");
     public bool ShowMonitorSection => SectionHas("monitor");
     public bool ShowBackupSection => SectionHas("backup");
+    public bool ShowAccessSection => SectionHas("access");
     /// <summary>Which cards the search leaves, by key.</summary>
     public ShownCards Shown => new(visible);
     public bool ShowMotion => visible.Contains("motion");
@@ -706,6 +715,19 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     StudioBackup? opened;
     string backupStatus = "";
     bool restoreSettings = true, restoreQuick = true, restoreConnections = true, restoreTrusted;
+    // 控制器接入
+    readonly ControllerAccess access;
+    string entryStatus = "";
+    public EntryProgram[] EntryPrograms { get; }
+    public bool EntriesMissing => EntryPrograms.Any(e => !e.IsThere);
+    public string EntryStatus { get => entryStatus; private set { if (Set(ref entryStatus, value)) Raise(nameof(HasEntryStatus)); } }
+    public bool HasEntryStatus => EntryStatus.Length > 0;
+    public ICommand CopyEntryCommand { get; }
+    public ICommand OpenEntryFolderCommand { get; }
+    public ObservableCollection<WakeUp> WakeUps => access.WakeUps;
+    public bool HasWakeUps => WakeUps.Count > 0;
+    void OnWakeUps(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => Raise(nameof(HasWakeUps));
+
     public ICommand BackupCommand { get; }
     public ICommand OpenBackupCommand { get; }
     public ICommand RestoreCommand { get; }
@@ -797,6 +819,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Appearance.Changed -= OnChanged;
         Appearance.Saved -= OnSaved;
         Highlighter.SlowFound -= OnSlowRule;
+        access.WakeUps.CollectionChanged -= OnWakeUps;
         if (quickStore != null) quickStore.Changed -= OnQuickChanged;
     }
 

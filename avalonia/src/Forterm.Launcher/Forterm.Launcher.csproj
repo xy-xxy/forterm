@@ -1,1 +1,1 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers><OutputType>WinExe</OutputType><AssemblyName>Forterm.Launcher</AssemblyName></PropertyGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers><OutputType>WinExe</OutputType><AssemblyName>Forterm.Launcher</AssemblyName><ApplicationIcon>../Forterm.Studio/Assets/forterm.ico</ApplicationIcon></PropertyGroup></Project>
