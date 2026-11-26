@@ -63,6 +63,46 @@ public sealed partial class SshTrace : ILoggerFactory
         lock (gate) if (named.Count < 64 && !named.Contains(text)) named.Add(text);
     }
     string Mac(string text) => Convert.ToHexString(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text.ToLowerInvariant())));
+    string upstreamWhich = "", upstreamReason = "";
+    SshTrace? upstream;
+
+    /// <summary>This connection ran through a jump host whose own connection ended first: that is what ended this one, not
+    /// the server at the end of it. <paramref name="which"/>: "跳板机", or "第 2 级跳板机" in a longer chain (our words);
+    /// <paramref name="jump"/>: the jump host's trace, if it had one; <paramref name="reason"/>: how its end was noticed
+    /// otherwise (our words). The first one counts.</summary>
+    public void UpstreamEnded(string which, SshTrace? jump, string? reason)
+    {
+        if (ReferenceEquals(jump, this)) jump = null;
+        lock (gate)
+        {
+            if (upstreamWhich.Length > 0) return;
+            (upstreamWhich, upstream, upstreamReason) = (which, jump, reason ?? "");
+        }
+    }
+
+    /// <summary>The jump host's end, said in our words and its server's; null when no jump host ended first.</summary>
+    string? Upstream(Func<string, string> safe)
+    {
+        string which, reason; SshTrace? jump;
+        lock (gate) (which, jump, reason) = (upstreamWhich, upstream, upstreamReason);
+        if (which.Length == 0) return null;
+        string how = jump?.Ended(safe) is { Length: > 0 } ended ? ended : reason;
+        return which + "的连接先断开了" + (how.Length > 0 ? "：" + how.TrimEnd('。', '；', '，') : "") + "。经它到这台服务器的连接也随之中断。";
+    }
+
+    /// <summary>How it ended, with what the server said through <paramref name="safe"/> and this trace's own secrets
+    /// hidden; "" while alive.</summary>
+    string Ended(Func<string, string> safe)
+    {
+        string[] hidden;
+        lock (gate) hidden = named.ToArray();
+        lock (gate)
+        {
+            if (ending.Length == 0) return "";
+            return Step + ending + (said.Length > 0 ? "（服务器的说明：" + safe(Hide(said, hidden, word => concealed.Contains(Mac(word)))) + "）" : "");
+        }
+    }
+
     public bool LoggedIn { get { lock (gate) return loggedIn; } }
     /// <summary>What the server shows before the login is complete (SSH_MSG_USERAUTH_BANNER). Text from the server.</summary>
     public string Banner { get { lock (gate) return banner; } }
@@ -72,6 +112,7 @@ public sealed partial class SshTrace : ILoggerFactory
     {
         get
         {
+            if (Upstream(said => said) is { } jump) return jump;
             lock (gate)
             {
                 if (ending.Length == 0) return "";
@@ -113,13 +154,14 @@ public sealed partial class SshTrace : ILoggerFactory
         string Safe(string text) => Hide(text, hidden, word => concealed.Contains(Mac(word)));
         var text = new StringBuilder();
         foreach (string line in head) text.AppendLine(line);
+        string? jump = Upstream(Safe);
         lock (gate)
         {
             if (client.Length > 0) text.AppendLine("本程序标识：" + client);
             text.AppendLine("服务器标识：" + (server.Length > 0 ? Safe(server) : "（没有收到）"));
             if (agreed.Length > 0) text.AppendLine("协商算法：" + agreed);
             // Only what the server said is gone through: a name like "服务器" must not take words out of ours.
-            text.AppendLine("结果：" + (ending.Length == 0 ? "连接仍在" : Step + ending + (said.Length > 0 ? "（服务器的说明：" + Safe(said) + "）" : "")));
+            text.AppendLine("结果：" + (jump ?? (ending.Length == 0 ? "连接仍在" : Step + ending + (said.Length > 0 ? "（服务器的说明：" + Safe(said) + "）" : ""))));
             text.AppendLine("协议消息（毫秒，→ 发出，← 收到；通道编号是收件一方的：发出的是服务器的编号，收到的是本程序的）：");
             // Names a server chooses (requests, login methods) are its words too.
             void Show(Line line) => text.Append(line.At.ToString().PadLeft(7)).Append("  ").Append(line.Text).Append(Safe(line.Said)).Append(line.Tail).AppendLine(line.Times > 1 ? " ×" + line.Times : "");

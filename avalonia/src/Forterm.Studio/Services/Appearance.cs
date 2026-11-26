@@ -87,6 +87,26 @@ public sealed record StudioPreferences
     /// <summary>"监控阈值".</summary>
     public MonitorThresholds Thresholds { get; init; } = new();
 
+    // "主题界面": a picture behind the window, and how much of the desktop shows through it.
+    /// <summary>"自定义背景图片": a copy in the data directory (<see cref="Backdrop"/>); "" = none.</summary>
+    public string BackgroundImage { get; init; } = "";
+    /// <summary>How much of the picture shows through the columns, 0.1–0.9.</summary>
+    public double BackgroundStrength { get; init; } = 0.35;
+    /// <summary>"全局不透明度" of the main window, 0.3–1.</summary>
+    public double WindowOpacity { get; init; } = 1;
+
+    // "布局"
+    /// <summary>"页签位置": the tabs of the terminal column below it instead of above.</summary>
+    public bool TabsAtBottom { get; init; }
+    /// <summary>"标签渲染": a terminal takes in its output from the start, also before it is first shown.</summary>
+    public bool StartHiddenTerminals { get; init; }
+
+    // "锁屏": the password itself is only in the system's credential store (<see cref="AppLock"/>).
+    /// <summary>Minutes without input after which Studio locks by itself; 0 = never.</summary>
+    public int LockMinutes { get; init; }
+    /// <summary>Locked from the start, until the password is given.</summary>
+    public bool LockAtStart { get; init; }
+
     /// <summary>"自定义高亮" on or off; null rules = the built-in set.</summary>
     public bool Highlight { get; init; } = true;
     public HighlightRule[]? HighlightRules { get; init; }
@@ -122,6 +142,10 @@ public sealed record StudioPreferences
         FileSort = Appearance.FileSorts.Any(s => s.Key == FileSort) ? FileSort : "name",
         DownloadFolder = Line(DownloadFolder, 1024) is { Length: > 0 } folder && Path.IsPathFullyQualified(folder) ? folder : "",
         Thresholds = (Thresholds ?? new()).Validated(),
+        BackgroundImage = Services.Backdrop.IsName(BackgroundImage) ? BackgroundImage : "",
+        BackgroundStrength = double.IsFinite(BackgroundStrength) ? Math.Round(Math.Clamp(BackgroundStrength, 0.1, 0.9), 2) : 0.35,
+        WindowOpacity = double.IsFinite(WindowOpacity) ? Math.Round(Math.Clamp(WindowOpacity, 0.3, 1), 2) : 1,
+        LockMinutes = Math.Clamp(LockMinutes, 0, 240),
     };
 
     /// <summary>The newest ones of the languages chosen by hand.</summary>
@@ -226,7 +250,7 @@ public static class Appearance
     /// <summary>Highlight rules are the bulk: 30 rules of escaped text stay well below this.</summary>
     const int MaxFileSize = 512 * 1024;
     static readonly string[] OverrideKeys = ["St.Window", "St.Panel", "St.Card", "St.TitleBar", "St.Hover", "St.Line", "St.Dialog", "St.DialogSection", "St.Menu", "St.Field", "St.Pressed", "St.NavActive",
-        "St.TitleBarText", "St.TitleBarHover", "St.TerminalBack", UiFontKey];
+        "St.TitleBarText", "St.TitleBarHover", "St.TerminalBack", "St.Terminal", UiFontKey];
     /// <summary>The Fluent theme's window font resource; overriding it restyles every window.</summary>
     const string UiFontKey = "ContentControlThemeFontFamily";
 
@@ -282,8 +306,14 @@ public static class Appearance
     }
 
     /// <summary>The part of the preferences <see cref="Apply"/> turns into resources.</summary>
-    static (string, bool, string, string, string, string) Visual(StudioPreferences p) => (p.Theme, p.FollowSystem, p.Accent, p.TitleBarColor, p.UiFont, p.TerminalScheme);
-    static (Application App, (string, bool, string, string, string, string) Visual)? applied;
+    static (string, bool, string, string, string, string, double) Visual(StudioPreferences p) => (p.Theme, p.FollowSystem, p.Accent, p.TitleBarColor, p.UiFont, p.TerminalScheme, SeeThrough(p));
+    static (Application App, (string, bool, string, string, string, string, double) Visual)? applied;
+
+    /// <summary>How much of the background picture shows through the window's surfaces; 0 without one.</summary>
+    public static double SeeThrough(StudioPreferences p) => p.BackgroundImage.Length > 0 ? p.BackgroundStrength : 0;
+    /// <summary>The surfaces a background picture shows through. Dialogs, menus and fields stay solid.</summary>
+    static readonly string[] Surfaces = ["St.Window", "St.Panel", "St.Card", "St.TitleBar", "St.TerminalBack", "St.Terminal"];
+    static bool variantWatched;
 
     public static void Apply(StudioPreferences preferences)
     {
@@ -332,6 +362,19 @@ public static class Appearance
         resources["St.AccentHover"] = Brush(Mix(preferences.Accent, "#FFFFFF", 0.12));
         resources["St.AccentSoft"] = new SolidColorBrush(Color.FromArgb(0x33, accent.R, accent.G, accent.B));
         resources["SystemAccentColor"] = accent;
+        if (SeeThrough(preferences) is > 0 and var through)
+        {
+            // The colours as they are now, with the picture showing through them.
+            foreach (string key in Surfaces)
+                if (app.TryGetResource(key, app.ActualThemeVariant, out object? value) && value is ISolidColorBrush brush)
+                    resources[key] = new SolidColorBrush(brush.Color, 1 - through);
+            if (!variantWatched)
+            {
+                // The system switched between light and dark: the see-through colours follow.
+                variantWatched = true;
+                app.ActualThemeVariantChanged += (_, _) => { if (SeeThrough(Current) > 0) { applied = null; Apply(Current); } };
+            }
+        }
         Changed?.Invoke(preferences);
     }
 

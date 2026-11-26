@@ -18,7 +18,7 @@ public sealed class IdleKeeper
     [
         new("space", "空格 + 退格（推荐）", " \x7f", "命令行里看不出变化。正在等待单个按键的程序（“按任意键继续”、more、git log 的分页）会收到一个空格。"),
         new("null", "空字符", "\0", "大多数程序忽略它；正在读取输入的程序（如 cat > 文件）会收到一个空字符。"),
-        new("enter", "回车", "\r", "命令行会多出一行；bash 的 TMOUT 只认回车。只在光标停在命令提示符（以 $、#、% 等结尾）后面、没有输入到一半的内容时发送，以免替你回答 [Y/n] 之类的问题；识别不出提示符时不发送。"),
+        new("enter", "回车", "\r", "命令行会多出一行；bash 的 TMOUT 只认回车。只在光标停在命令提示符后面（以 $、#、%、❯ 结尾，oh-my-zsh 的 ➜，Windows 和 fish 的 >；右侧另有提示也可以）、没有输入到一半的内容时发送，以免替你回答 [Y/n] 之类的问题；识别不出提示符时不发送。"),
     ];
     public static readonly int[] Minutes = [1, 2, 3, 4, 5, 8, 10, 15, 20, 30], Hours = [1, 2, 4, 8, 12, 24];
 
@@ -173,6 +173,59 @@ public sealed class IdleWatch : IPtyConnection
             keeper.Done();
         }
         finally { one.Release(); }
+    }
+
+    /// <summary>How much of a paste goes out at a time: cancelling stops between pieces, and inside one when the
+    /// server does not take it.</summary>
+    internal const int PastePiece = 4096;
+
+    /// <summary>A paste: <paramref name="head"/> (the keys that delete a keyboard selection it replaces), then the text,
+    /// bracketed when the program asked for it — in one piece, with nothing of anybody else's in between. Cancelling stops
+    /// what has not gone out yet; a bracket that was opened is closed all the same, or the shell would take whatever is
+    /// typed next as part of the paste. False = cancelled.</summary>
+    public async Task<bool> SendPasteAsync(string head, string text, bool bracketed, CancellationToken cancel, CancellationToken lifetime)
+    {
+        await one.WaitAsync(cancel).ConfigureAwait(false);
+        bool opened = false;
+        try
+        {
+            try
+            {
+                // Whole or not at all: half of the opening sequence would be left for the next key to complete.
+                await PieceAsync(head + (bracketed ? "\u001b[200~" : ""), lifetime).ConfigureAwait(false);
+                opened = bracketed;
+                for (int at = 0; at < text.Length;)
+                {
+                    int length = Math.Min(PastePiece, text.Length - at);
+                    // Never half of a pair: each piece is whole UTF-8.
+                    if (at + length < text.Length && char.IsHighSurrogate(text[at + length - 1])) length--;
+                    await PieceAsync(text.Substring(at, length), cancel).ConfigureAwait(false);
+                    at += length;
+                }
+                opened = false;
+                if (bracketed) await PieceAsync("\u001b[201~", lifetime).ConfigureAwait(false);
+                return true;
+            }
+            catch (OperationCanceledException) when (cancel.IsCancellationRequested && !lifetime.IsCancellationRequested)
+            {
+                if (opened) await PieceAsync("\u001b[201~", lifetime).ConfigureAwait(false);
+                return false;
+            }
+        }
+        finally
+        {
+            keeper.Done();
+            one.Release();
+        }
+    }
+
+    async Task PieceAsync(string piece, CancellationToken ct)
+    {
+        if (piece.Length == 0) return;
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(piece);
+        keeper.Sent(bytes);
+        await inner.WriterStream.WriteAsync(bytes, ct).ConfigureAwait(false);
+        await inner.WriterStream.FlushAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Sends what is due by itself — now or not at all: what waited for a slow server would come out later,

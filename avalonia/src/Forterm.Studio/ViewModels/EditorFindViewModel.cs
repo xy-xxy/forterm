@@ -130,15 +130,21 @@ public sealed class EditorFindViewModel : ObservableObject
         if (query.Length > 0)
         {
             var options = RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | RegexOptions.Multiline | (matchCase ? 0 : RegexOptions.IgnoreCase);
+            // Patterns run in time linear in the text where they can. Looking around and back-references need the engine
+            // that tries one way after another; it is stopped by the same time limit, between matches and inside one.
+            Regex Make(string p)
+            {
+                try { return new Regex(p, options, Longest); }
+                catch (NotSupportedException) { return new Regex(p, options & ~RegexOptions.NonBacktracking, Longest); }
+            }
             try
             {
                 string text = regex ? query : Regex.Escape(query);
-                pattern = new Regex(text, options, Longest);
+                pattern = Make(text);
                 // By itself first: "a)(b" is no pattern, although it would become one in brackets.
-                if (wholeWord && regex) wordPattern = new Regex($@"\b(?:{text})\b", options, Longest);
-                else if (wholeWord) pattern = new Regex((Word(query, 0) ? @"\b" : "") + text + (Word(query, query.Length - 1) ? @"\b" : ""), options, Longest);
+                if (wholeWord && regex) wordPattern = Make($@"\b(?:{text})\b");
+                else if (wholeWord) pattern = Make((Word(query, 0) ? @"\b" : "") + text + (Word(query, query.Length - 1) ? @"\b" : ""));
             }
-            catch (NotSupportedException) { error = "不支持前后查看、反向引用等写法"; }
             catch (ArgumentException) { error = "正则写法有误"; }
         }
         stale = true;

@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:Forterm.Studio.Controls"
+             x:Class="Forterm.Studio.Views.LockView"
+             Background="{DynamicResource St.Dialog}" IsVisible="False" DragDrop.AllowDrop="False">
+  <!-- Solid (St.Dialog stays solid under a background picture): nothing of the sessions shows through. In a small dialog
+       the card scrolls. -->
+  <ScrollViewer HorizontalAlignment="Center" VerticalAlignment="Center" HorizontalScrollBarVisibility="Disabled">
+  <Border MaxWidth="380" Margin="12" Padding="26,24" CornerRadius="10"
+          Background="{DynamicResource St.DialogSection}" BorderBrush="{DynamicResource St.Line}" BorderThickness="1">
+    <StackPanel Spacing="12">
+      <c:StrokeIcon Data="{StaticResource Icon.Lock}" Width="30" Height="30" HorizontalAlignment="Center" Brush="{DynamicResource St.Accent}"/>
+      <TextBlock Text="Forterm 已锁定" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                 Text="会话仍在运行（心跳、空闲保活和传输照常）。输入锁屏密码解锁。"/>
+      <TextBox Name="PasswordBox" PasswordChar="●" PlaceholderText="锁屏密码" Padding="10,7" AutomationProperties.Name="锁屏密码"/>
+      <TextBlock Name="ProblemText" FontSize="12" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" IsVisible="False"/>
+      <Button Name="UnlockButton" Classes="primary" Content="解锁" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="解锁"/>
+      <Button Name="ForgotButton" Classes="link" Content="忘记密码？" HorizontalAlignment="Center" FontSize="12"/>
+      <StackPanel Name="ForgotPanel" IsVisible="False" Spacing="8">
+        <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap"
+                   Text="密码无法找回，只能退出程序：所有会话都会断开，没有保存的编辑会丢失，进行中的传输会停止。要去掉锁屏密码，可以在系统钥匙串（Windows 为“凭据管理器”）里删除 Forterm Studio 的 studio/lock/verifier 一项。"/>
+        <Button Name="QuitButton" Classes="secondary" Content="退出 Forterm" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Foreground="{DynamicResource St.Danger}" AutomationProperties.Name="退出 Forterm"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+  </ScrollViewer>
+</UserControl>

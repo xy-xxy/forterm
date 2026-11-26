@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         CloseGuard.Register();
+        AppLock.Register();
         AvaloniaXamlLoader.Load(this);
         WindowDecorationsTheme = (ControlTheme)Resources["StudioDecorations"]!;
         if (Screens.Primary is { } screen) FitTo(screen.WorkingArea, screen.Scaling);
@@ -50,6 +51,9 @@ public sealed partial class MainWindow : Window
     }
 
     public MainWindowViewModel ViewModel => (MainWindowViewModel)DataContext!;
+
+    /// <summary>Ended from the lock screen: nothing is asked.</summary>
+    bool quitting;
 
     /// <summary>Set while the window confirms or performs its close; launches are routed elsewhere.</summary>
     public bool IsClosing { get; private set; }
@@ -98,10 +102,62 @@ public sealed partial class MainWindow : Window
         Scale(Appearance.Current);
         Appearance.Changed += Scale;
         Closed += (_, _) => Appearance.Changed -= Scale;
+
+        // "自定义背景图片" and "全局不透明度".
+        var backdrop = this.FindControl<Image>("BackdropImage")!;
+        var solid = TransparencyLevelHint;
+        void Look(StudioPreferences p)
+        {
+            var image = Backdrop.Load(StudioPaths.DataDirectory, p);
+            if (!ReferenceEquals(backdrop.Source, image)) backdrop.Source = image;
+            backdrop.IsVisible = image != null;
+            bool clear = p.WindowOpacity < 1;
+            TransparencyLevelHint = clear ? [WindowTransparencyLevel.Transparent] : solid;
+            Opacity = p.WindowOpacity;
+        }
+        Look(Appearance.Current);
+        Appearance.Changed += Look;
+        Closed += (_, _) => Appearance.Changed -= Look;
+
+        // Terminals that start before they are shown are laid out here.
+        var warm = this.FindControl<Canvas>("WarmUpHost")!;
+        TerminalWarmUp.Use(warm);
+        Closed += (_, _) => TerminalWarmUp.Forget(warm);
+
+        // "锁屏": ended from the lock screen (the password is forgotten), the window closes without asking.
+        var lockLayer = this.FindControl<LockView>("LockLayer")!;
+        void Quit()
+        {
+            quitting = true;
+            if (Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop) desktop.Shutdown();
+            else Close();
+        }
+        AppLock.QuitRequested += Quit;
+        Closed += (_, _) => AppLock.QuitRequested -= Quit;
+        // Locked: the lock screen first (it remembers what had the keyboard), then everything else is hidden; unlocked, the
+        // other way round.
+        var content = this.FindControl<Grid>("ContentLayer")!;
+        void Locked()
+        {
+            if (AppLock.IsLocked) { lockLayer.Begin(); content.IsVisible = false; }
+            else { content.IsVisible = true; lockLayer.End(); }
+        }
+        AppLock.Changed += Locked;
+        Closed += (_, _) => AppLock.Changed -= Locked;
+        Opened += (_, _) => { if (AppLock.IsLocked) Locked(); };
         Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
         bool closeConfirmed = false;
         Closing += async (_, e) =>
         {
+            // Locked, the window stays: what is in it is not to be seen, nor asked about. Ending it from the lock screen,
+            // or by code, goes on.
+            if (AppLock.IsLocked && !quitting && !e.IsProgrammatic)
+            {
+                e.Cancel = true;
+                lockLayer.Tell("已锁定：先解锁再关闭窗口。忘记密码时，可以点“忘记密码？”退出。");
+                return;
+            }
+            if (quitting) { IsClosing = true; return; }
             if (closeConfirmed || DataContext is not MainWindowViewModel vm || !vm.NeedsCloseConfirmation) { IsClosing = true; return; }
             e.Cancel = true;
             if (IsClosing) return; // a confirmation (or the transfer drain) is already in progress
@@ -237,7 +293,8 @@ public sealed partial class MainWindow : Window
 
     void OnShortcut(object? sender, KeyEventArgs e)
     {
-        if (bound is not { } vm) return;
+        // Locked: keys are for the password box only, not for the window.
+        if (bound is not { } vm || AppLock.IsLocked) return;
         if (vm.Palette.IsOpen)
         {
             var text = this.FindControl<TextBox>("PaletteText")!;
@@ -257,6 +314,7 @@ public sealed partial class MainWindow : Window
         int number = Shortcuts.SessionNumber(e);
         if (number > 0) vm.ShowSession(number);
         else if (Shortcuts.Matches(Shortcuts.Palette, e)) vm.Palette.Open();
+        else if (Shortcuts.Matches(Shortcuts.Lock, e)) { if (!IsRepeat(e)) vm.LockCommand.Execute(null); }
         else if (Shortcuts.Matches(Shortcuts.NewTerminal, e)) { if (!IsRepeat(e)) vm.NewTerminal(); }
         else if (Shortcuts.Matches(Shortcuts.CloseTab, e)) { if (!IsRepeat(e)) _ = CloseTabAsync(vm); }
         else if (Shortcuts.Matches(Shortcuts.Home, e)) vm.ShowHomeCommand.Execute(null);

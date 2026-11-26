@@ -176,6 +176,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         get => activeTab;
         set
         {
+            // A terminal being laid out unseen ("标签渲染") is let go before it is shown here.
+            if (value is TerminalTabViewModel shown) TerminalWarmUp.Release(shown.Control);
             if (!Set(ref activeTab, value)) return;
             foreach (var tab in CenterTabs) tab.IsActive = ReferenceEquals(tab, value);
             if (value is TerminalTabViewModel terminal) { activeTerminal = terminal; Raise(nameof(ActiveTerminal)); Raise(nameof(Terminal)); }
@@ -207,8 +209,13 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         tab.ActivateCommand = new RelayCommand(() => ActiveTab = tab);
         tab.CloseCommand = new RelayCommand(() => CloseTerminal(tab));
         tab.Control.PasteFilter = text => ReviewPasteAsync(tab, text);
+        tab.Control.PasteSender = (head, text, bracketed) => SendPasteAsync(tab, head, text, bracketed);
         tab.Control.FindRequested += () => { if (ReferenceEquals(activeTab, tab)) Find.Open(); };
-        tab.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(TerminalTabViewModel.IsRecording)) Raise(nameof(IsRecording)); };
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TerminalTabViewModel.IsRecording)) Raise(nameof(IsRecording));
+            else if (e.PropertyName == nameof(TerminalTabViewModel.IsPasteSlow)) Raise(nameof(IsPasteSlow));
+        };
         Terminals.Add(tab);
         CenterTabs.Add(tab);
         ActiveTab = tab;

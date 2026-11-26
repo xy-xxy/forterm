@@ -1,9 +1,10 @@
 --- a/TerminalControl.cs
 +++ b/TerminalControl.cs
-@@ -19,7 +19,40 @@
+@@ -18,7 +18,48 @@
+         private TerminalView? _terminalView;
          private ScrollBar? _scrollBar;
          private string? _currentDirectory;
- 
++
 +        public static readonly StyledProperty<bool> AutoStartOnLoadProperty =
 +            AvaloniaProperty.Register<TerminalControl, bool>(nameof(AutoStartOnLoad), true);
 +        public bool AutoStartOnLoad
@@ -11,9 +12,10 @@
 +            get => GetValue(AutoStartOnLoadProperty);
 +            set => SetValue(AutoStartOnLoadProperty, value);
 +        }
- 
++
 +
 +        private Func<string, Task<string?>>? _pasteFilter;
++        private Func<string, string, bool, Task>? _pasteSender;
 +        private Func<string, string>? _copyFilter;
 +        private Func<string, System.Collections.Generic.IReadOnlyList<TextHighlight>>? _highlightProvider;
 +
@@ -24,30 +26,37 @@
 +            set { _pasteFilter = value; if (_terminalView != null) _terminalView.PasteFilter = value; }
 +        }
 +
++        /// <inheritdoc cref="TerminalView.PasteSender"/>
++        public Func<string, string, bool, Task>? PasteSender
++        {
++            get => _pasteSender;
++            set { _pasteSender = value; if (_terminalView != null) _terminalView.PasteSender = value; }
++        }
++
 +        /// <inheritdoc cref="TerminalView.CopyFilter"/>
 +        public Func<string, string>? CopyFilter
 +        {
 +            get => _copyFilter;
 +            set { _copyFilter = value; if (_terminalView != null) _terminalView.CopyFilter = value; }
 +        }
-+
+ 
 +        /// <inheritdoc cref="TerminalView.HighlightProvider"/>
 +        public Func<string, System.Collections.Generic.IReadOnlyList<TextHighlight>>? HighlightProvider
 +        {
 +            get => _highlightProvider;
 +            set { _highlightProvider = value; if (_terminalView != null) _terminalView.HighlightProvider = value; }
 +        }
-+
+ 
          public static readonly StyledProperty<TextDecorationLocation?> TextDecorationsProperty =
              AvaloniaProperty.Register<TerminalControl, TextDecorationLocation?>(
-                 nameof(TextDecorations),
-@@ -683,6 +716,21 @@
+@@ -682,7 +723,22 @@
+ 
          /// <inheritdoc cref="TerminalView.SearchCurrentIndex"/>
          public int SearchCurrentIndex => _terminalView?.SearchCurrentIndex ?? -1;
- 
++
 +        /// <inheritdoc cref="TerminalView.OutputWritten"/>
 +        public long OutputWritten => _terminalView?.OutputWritten ?? 0;
-+
+ 
 +        /// <inheritdoc cref="TerminalView.ReadCursorLine"/>
 +        public TerminalCursorLine? ReadCursorLine() => _terminalView?.ReadCursorLine();
 +
@@ -63,11 +72,12 @@
          /// <inheritdoc cref="TerminalView.SearchTruncated"/>
          public bool SearchTruncated => _terminalView?.SearchTruncated ?? false;
  
-@@ -866,6 +914,9 @@
+@@ -866,6 +922,10 @@
              if (_terminalView != null)
              {
                  _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
 +                _terminalView.PasteFilter = _pasteFilter;
++                _terminalView.PasteSender = _pasteSender;
 +                _terminalView.CopyFilter = _copyFilter;
 +                _terminalView.HighlightProvider = _highlightProvider;
                  _terminalView.PropertyChanged += OnTerminalViewPropertyChanged;
@@ -75,7 +85,7 @@
                  _terminalView.WritingMessage += OnTerminalViewWritingMessage;
 --- /dev/null
 +++ b/TerminalView.Forterm.cs
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,224 @@
 +using System;
 +using System.Collections.Generic;
 +using System.Text;
@@ -110,6 +120,15 @@
 +        /// (mode 5522) is not used, because it would hand the program formats the filter never saw.
 +        /// </remarks>
 +        public Func<string, Task<string?>>? PasteFilter { get; set; }
++
++        /// <summary>
++        /// Sends a paste that <see cref="PasteFilter"/> let through, instead of the view writing it. Gets what
++        /// goes in front of it (the keys that delete a keyboard selection the paste replaces, or ""), the
++        /// text, and whether the program asked for bracketed paste; the text is not wrapped yet. Lets the host
++        /// send a long paste in a way that can be stopped. It is called in turn with the view's own input, which waits until
++        /// it returns. Without it the view writes the paste itself.
++        /// </summary>
++        public Func<string, string, bool, Task>? PasteSender { get; set; }
 +
 +        /// <summary>
 +        /// Adjusts the selected text before <see cref="CopyAsync"/> puts it on the clipboard.
@@ -265,9 +284,29 @@
 +            if (string.IsNullOrEmpty(reviewed) || _ptyConnection == null || SessionId != session)
 +                return;
 +
++            var deletion = immediate ? TakeKeyboardSelectionDeletion() : string.Empty;
++            if (PasteSender is { } sender)
++            {
++                // In line with the keys typed before it, and ahead of those typed after it, as SendToPtyAsync would be.
++                var connection = _ptyConnection;
++                bool bracketed = _terminal.BracketedPasteMode;
++                // On the caller's thread: the sender is the host's, and may touch its own UI.
++                await _semaphore.WaitAsync();
++                try
++                {
++                    if (ReferenceEquals(_ptyConnection, connection))
++                        await sender(deletion, reviewed, bracketed);
++                }
++                finally
++                {
++                    _semaphore.Release();
++                }
++                return;
++            }
++
 +            if (_terminal.BracketedPasteMode)
 +                reviewed = $"\u001b[200~{reviewed}\u001b[201~";
-+            await SendToPtyAsync((immediate ? TakeKeyboardSelectionDeletion() : string.Empty) + reviewed);
++            await SendToPtyAsync(deletion + reviewed);
 +        }
 +    }
 +}

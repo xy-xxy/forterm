@@ -138,7 +138,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
     public const string DefaultFont = "默认";
 
-    static readonly (string Key, string Title)[] SectionTitles = [("theme", "主题界面"), ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("editor", "编辑器"), ("files", "文件与传输"), ("layout", "布局"), ("monitor", "监控阈值"), ("keys", "快捷键"), ("local", "本地终端"), ("access", "控制器接入"), ("backup", "备份恢复"), ("about", "关于与验证说明")];
+    static readonly (string Key, string Title)[] SectionTitles = [("theme", "主题界面"), ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("editor", "编辑器"), ("files", "文件与传输"), ("layout", "布局"), ("monitor", "监控阈值"), ("keys", "快捷键"), ("lock", "锁屏"), ("local", "本地终端"), ("access", "控制器接入"), ("backup", "备份恢复"), ("about", "关于与验证说明")];
 
     public static readonly SettingEntry[] Entries =
     [
@@ -149,6 +149,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         new("uifont", "theme", "系统字体", "系统字体 界面字体 字体"),
         new("scale", "theme", "界面缩放", "界面缩放 大小 缩放"),
         new("motion", "theme", "界面动画", "界面动画 动画 动效 过渡 减少动态效果"),
+        new("bgimage", "theme", "自定义背景图片", "背景 图片 壁纸 照片 自定义 透明"),
+        new("opacity", "theme", "全局不透明度", "不透明度 透明 半透明 窗口"),
         new("termfont", "terminal", "终端字体", "终端字体 等宽 字体"),
         new("termsize", "terminal", "终端字号", "终端字号 字号 字体大小"),
         new("scheme", "terminal", "终端配色", "终端配色 配色 颜色 主题"),
@@ -174,8 +176,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         new("fnotify", "files", "完成提示", "传输 完成 提示 通知"),
         new("columns", "layout", "新会话显示的栏", "布局 栏 文件 监控 默认 显示"),
         new("widths", "layout", "栏宽", "布局 栏宽 宽度 恢复默认"),
+        new("tabpos", "layout", "页签位置", "页签 标签 位置 顶部 底部 终端栏 本地终端"),
+        new("tabrender", "layout", "标签渲染", "标签 页签 渲染 后台 终端 初始化 输出 暂停 本地终端"),
         new("limits", "monitor", "监控阈值", "监控 阈值 磁盘 CPU 内存 负载 注意 严重 告警"),
         new("keys", "keys", "快捷键", "快捷键 键盘 命令面板 热键 按键 自定义"),
+        new("lockpw", "lock", "锁屏密码", "锁屏 锁定 密码 离开 隐私"),
+        new("lockauto", "lock", "自动锁定", "锁屏 锁定 自动 空闲 离开 分钟 启动"),
         new("entries", "access", "入口程序", "控制器 接入 入口 xshell xftp 唤醒 路径 位置 堡垒机 SSO"),
         new("wakes", "access", "最近的唤醒", "控制器 唤醒 记录 没反应"),
         new("backup", "backup", "备份", "备份 导出 保存 配置"),
@@ -258,6 +264,11 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         DesktopDownloadCommand = new RelayCommand(() => Commit(p0 => p0 with { DownloadFolder = "" }));
         ResetWidthsCommand = new RelayCommand(() => { var d = new StudioPreferences(); Commit(p0 => p0 with { FilesWidth = d.FilesWidth, MonitorWidth = d.MonitorWidth }); });
         ResetThresholdsCommand = new RelayCommand(() => Commit(p0 => p0 with { Thresholds = new() }));
+        ChooseBackgroundCommand = new AsyncCommand(ChooseBackgroundAsync, e => BackgroundStatus = "没有使用这张图片：" + WorkspaceViewModel.Short(e.Message));
+        RemoveBackgroundCommand = new RelayCommand(() => { Commit(p0 => p0 with { BackgroundImage = "" }); Backdrop.Forget(directory, ""); BackgroundStatus = ""; });
+        SaveLockCommand = new AsyncCommand(SaveLockAsync, e => LockStatus = "没有保存：" + WorkspaceViewModel.Short(e.Message));
+        RemoveLockCommand = new AsyncCommand(RemoveLockAsync, e => LockStatus = "没有移除：" + WorkspaceViewModel.Short(e.Message));
+        LockNowCommand = new AsyncCommand(async () => { if (await AppLock.LockAsync() is { } why) LockStatus = why; }, e => LockStatus = "没有锁定：" + WorkspaceViewModel.Short(e.Message));
         Keys = Shortcuts.All.Select(x => new ShortcutItem(this, x)).ToArray();
         ResetKeysCommand = new RelayCommand(() => { EndCapture(); Commit(p0 => p0 with { Shortcuts = null }); });
         EntryPrograms = this.access.Programs;
@@ -312,7 +323,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref section, SectionTitles.Any(s => s.Key == value) ? value : "theme")) return;
             EndCapture();
-            foreach (string name in new[] { nameof(IsTheme), nameof(IsTerminal), nameof(IsHighlight), nameof(IsQuick), nameof(IsKeys), nameof(IsLocal), nameof(IsAbout), nameof(IsEditor), nameof(IsFiles), nameof(IsLayout), nameof(IsMonitor), nameof(IsBackup), nameof(IsAccess) }) Raise(name);
+            foreach (string name in new[] { nameof(IsTheme), nameof(IsTerminal), nameof(IsHighlight), nameof(IsQuick), nameof(IsKeys), nameof(IsLocal), nameof(IsAbout), nameof(IsEditor), nameof(IsFiles), nameof(IsLayout), nameof(IsMonitor), nameof(IsBackup), nameof(IsAccess), nameof(IsLock) }) Raise(name);
+            if (section == "lock") _ = ReadLockAsync();
         }
     }
     public bool IsHighlight => section == "highlight";
@@ -324,6 +336,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool IsMonitor => section == "monitor";
     public bool IsBackup => section == "backup";
     public bool IsAccess => section == "access";
+    public bool IsLock => section == "lock";
     public bool IsTheme => section == "theme";
     public bool IsTerminal => section == "terminal";
     public bool IsLocal => section == "local";
@@ -346,7 +359,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 nameof(ShowPresets), nameof(ShowNavColor), nameof(ShowAccent), nameof(ShowFollow), nameof(ShowUiFont), nameof(ShowScale),
                 nameof(ShowTermFont), nameof(ShowTermSize), nameof(ShowScheme), nameof(ShowProtect), nameof(ShowShell), nameof(ShowShellArgs), nameof(ShowLocalTerm), nameof(ShowAbout),
                 nameof(Shown), nameof(ShowEditorSection), nameof(ShowFilesSection), nameof(ShowLayoutSection), nameof(ShowMonitorSection), nameof(ShowBackupSection), nameof(ShowAccessSection),
-                nameof(ShowHighlightSection), nameof(ShowQuickSection), nameof(ShowKeysSection), nameof(ShowMotion), nameof(ShowCursor), nameof(ShowScrollback), nameof(ShowRightClick), nameof(ShowPaste), nameof(ShowCopySelect), nameof(ShowRecord),
+                nameof(ShowHighlightSection), nameof(ShowQuickSection), nameof(ShowKeysSection), nameof(ShowLockSection), nameof(ShowMotion), nameof(ShowCursor), nameof(ShowScrollback), nameof(ShowRightClick), nameof(ShowPaste), nameof(ShowCopySelect), nameof(ShowRecord),
             }) Raise(name);
         }
     }
@@ -373,6 +386,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool ShowMonitorSection => SectionHas("monitor");
     public bool ShowBackupSection => SectionHas("backup");
     public bool ShowAccessSection => SectionHas("access");
+    public bool ShowLockSection => SectionHas("lock");
     /// <summary>Which cards the search leaves, by key.</summary>
     public ShownCards Shown => new(visible);
     public bool ShowMotion => visible.Contains("motion");
@@ -649,8 +663,93 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public ICommand ChooseDownloadFolderCommand { get; }
     public ICommand DesktopDownloadCommand { get; }
 
+    // 主题界面: "自定义背景图片", "全局不透明度"
+    string backgroundStatus = "";
+    public bool HasBackgroundImage => prefs.BackgroundImage.Length > 0;
+    public double BackgroundPercent { get => Math.Round(prefs.BackgroundStrength * 100); set => Commit(p0 => p0 with { BackgroundStrength = Math.Round(value) / 100 }); }
+    public string BackgroundPercentText => $"{BackgroundPercent:0}%";
+    public double OpacityPercent { get => Math.Round(prefs.WindowOpacity * 100); set => Commit(p0 => p0 with { WindowOpacity = Math.Round(value) / 100 }); }
+    public string OpacityText => $"{OpacityPercent:0}%";
+    public string BackgroundStatus { get => backgroundStatus; private set { if (Set(ref backgroundStatus, value)) Raise(nameof(HasBackgroundStatus)); } }
+    public bool HasBackgroundStatus => backgroundStatus.Length > 0;
+    public ICommand ChooseBackgroundCommand { get; private set; } = null!;
+    public ICommand RemoveBackgroundCommand { get; private set; } = null!;
+
+    async Task ChooseBackgroundAsync()
+    {
+        if (interaction == null || directory == null) { BackgroundStatus = "没有数据目录，不能保存图片"; return; }
+        if (await interaction.PickOpenFileAsync("选择背景图片") is not { } file) return;
+        BackgroundStatus = "正在读取图片…";
+        try
+        {
+            string name = await Backdrop.ImportAsync(file, directory);
+            Commit(p0 => p0 with { BackgroundImage = name });
+            Backdrop.Forget(directory, name);
+            BackgroundStatus = Backdrop.Load(directory, prefs) == null ? "图片已复制，但读不出来；请换一张" : "";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or ArgumentException)
+        {
+            BackgroundStatus = "没有使用这张图片：" + WorkspaceViewModel.Short(e.Message);
+        }
+    }
+
     // 布局
     public bool OpenFiles { get => prefs.OpenFiles; set => Commit(p0 => p0 with { OpenFiles = value }); }
+    public static readonly string[] TabPositions = ["顶部", "底部"];
+    public string TabPosition { get => TabPositions[prefs.TabsAtBottom ? 1 : 0]; set { if (value != null) Commit(p0 => p0 with { TabsAtBottom = value == TabPositions[1] }); } }
+    public static readonly string[] TabRenders = ["显示时再开始（默认）", "立即开始"];
+    public string TabRender { get => TabRenders[prefs.StartHiddenTerminals ? 1 : 0]; set { if (value != null) Commit(p0 => p0 with { StartHiddenTerminals = value == TabRenders[1] }); } }
+
+    // 锁屏
+    public static readonly string[] LockChoices = ["不自动锁定", "5 分钟", "10 分钟", "15 分钟", "30 分钟", "60 分钟"];
+    static readonly int[] LockMinutesOf = [0, 5, 10, 15, 30, 60];
+    string lockCurrent = "", lockNew = "", lockRepeat = "", lockStatus = "";
+    bool? lockSet;
+    public string LockChoice
+    {
+        get => Array.IndexOf(LockMinutesOf, prefs.LockMinutes) is >= 0 and var i ? LockChoices[i] : $"{prefs.LockMinutes} 分钟";
+        set { if (value != null && Array.IndexOf(LockChoices, value) is >= 0 and var i) Commit(p0 => p0 with { LockMinutes = LockMinutesOf[i] }); }
+    }
+    public bool LockAtStart { get => prefs.LockAtStart; set => Commit(p0 => p0 with { LockAtStart = value }); }
+    public string LockCurrent { get => lockCurrent; set => Set(ref lockCurrent, value ?? ""); }
+    public string LockNew { get => lockNew; set => Set(ref lockNew, value ?? ""); }
+    public string LockRepeat { get => lockRepeat; set => Set(ref lockRepeat, value ?? ""); }
+    public string LockStatus { get => lockStatus; private set { if (Set(ref lockStatus, value)) Raise(nameof(HasLockStatus)); } }
+    public bool HasLockStatus => lockStatus.Length > 0;
+    /// <summary>Whether a lock password is set; null while that is not known.</summary>
+    public bool HasLockPassword => lockSet == true;
+    public bool NoLockPassword => lockSet == false;
+    public string LockState => lockSet switch { true => "已设置锁屏密码。", false => "还没有设置锁屏密码：设置后才能锁定。", _ => "正在读取…" };
+    public string LockKeys => Shortcuts.Lock.IsOff ? "" : "快捷键 " + Shortcuts.Lock.Keys + "，也可以在命令面板里选“锁定 Forterm”。";
+    public ICommand SaveLockCommand { get; private set; } = null!;
+    public ICommand RemoveLockCommand { get; private set; } = null!;
+    public ICommand LockNowCommand { get; private set; } = null!;
+
+    void RaiseLock() { foreach (string name in new[] { nameof(HasLockPassword), nameof(NoLockPassword), nameof(LockState) }) Raise(name); }
+
+    async Task ReadLockAsync()
+    {
+        try { lockSet = await AppLock.HasPasswordAsync(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException) { lockSet = null; LockStatus = "读不到锁屏密码：" + WorkspaceViewModel.Short(e.Message); }
+        RaiseLock();
+    }
+
+    async Task SaveLockAsync()
+    {
+        if (lockNew != lockRepeat) { LockStatus = "两次输入的新密码不一样"; return; }
+        string? problem = await AppLock.SetPasswordAsync(lockCurrent, lockNew);
+        LockCurrent = LockNew = LockRepeat = "";
+        LockStatus = problem ?? "锁屏密码已保存";
+        await ReadLockAsync();
+    }
+
+    async Task RemoveLockAsync()
+    {
+        string? problem = await AppLock.RemovePasswordAsync(lockCurrent);
+        LockCurrent = LockNew = LockRepeat = "";
+        LockStatus = problem ?? "锁屏密码已移除，不会再锁定";
+        await ReadLockAsync();
+    }
     public bool OpenMonitor { get => prefs.OpenMonitor; set => Commit(p0 => p0 with { OpenMonitor = value }); }
     public ICommand ResetWidthsCommand { get; }
 
@@ -845,6 +944,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             nameof(IdleKeepAlive), nameof(IdleMinutes), nameof(IdleInput), nameof(IdleInputNote), nameof(IdleHours), nameof(IdleFullScreen),
             nameof(EditorFont), nameof(EditorFontSize), nameof(EditorWrap), nameof(EditorWhitespace), nameof(EditorLineNumbers), nameof(EditorColours), nameof(EditorSpaces), nameof(EditorTab), nameof(HasLanguages), nameof(LanguagesText),
             nameof(FileSort), nameof(FileSortDescending), nameof(ShowHiddenFiles), nameof(FileDetails), nameof(NotifyTransfers), nameof(HasDownloadFolder), nameof(DownloadFolderText),
+            nameof(HasBackgroundImage), nameof(BackgroundPercent), nameof(BackgroundPercentText), nameof(OpacityPercent), nameof(OpacityText), nameof(TabPosition), nameof(TabRender), nameof(LockChoice), nameof(LockAtStart), nameof(LockKeys),
             nameof(OpenFiles), nameof(OpenMonitor), nameof(DiskWarning), nameof(DiskDanger), nameof(CpuWarning), nameof(CpuDanger), nameof(MemoryWarning), nameof(MemoryDanger), nameof(LoadWarning), nameof(LoadDanger), nameof(LimitsText), nameof(LimitsChanged), nameof(KeysChanged),
         }) Raise(name);
         foreach (var k in Keys) k.Sync(k == capturing, k.Error);

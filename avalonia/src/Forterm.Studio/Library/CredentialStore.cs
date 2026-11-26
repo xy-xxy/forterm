@@ -29,6 +29,12 @@ public sealed class CredentialStore(ISecretVault vault)
     public Task SaveAccountSecretAsync(string id, string kind, string value, CancellationToken ct) => Write(AccountKey(id, kind), value, ct);
     public Task ForgetAccountSecretAsync(string id, string kind, CancellationToken ct) => vault.DeleteAsync(AccountKey(id, kind), ct);
 
+    /// <summary>"锁屏": the check for the password (a salted slow hash, never the password itself).</summary>
+    const string LockKey = "studio/lock/verifier";
+    public Task<string?> LockVerifierAsync(CancellationToken ct) => Read(LockKey, ct);
+    public Task SaveLockVerifierAsync(string verifier, CancellationToken ct) => Write(LockKey, verifier, ct);
+    public Task ForgetLockVerifierAsync(CancellationToken ct) => vault.DeleteAsync(LockKey, ct);
+
     async Task<string?> Read(string key, CancellationToken ct)
     {
         var bytes = await vault.ReadAsync(key, ct);

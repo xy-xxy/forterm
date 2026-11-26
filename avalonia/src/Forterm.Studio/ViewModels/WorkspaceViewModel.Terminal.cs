@@ -26,6 +26,7 @@ public sealed partial class WorkspaceViewModel
     public ICommand RunQuickCommand { get; private set; } = null!;
     public ICommand ManageQuickCommandsCommand { get; private set; } = null!;
     public ICommand TerminalSettingsCommand { get; private set; } = null!;
+    public ICommand CancelPasteCommand { get; private set; } = null!;
 
     /// <summary>Opens the settings window at a category; set by the main window.</summary>
     public Action<string>? ShowSettings { get; set; }
@@ -46,6 +47,7 @@ public sealed partial class WorkspaceViewModel
         RunQuickCommand = new AsyncCommand<QuickCommand>(RunQuickAsync, e => Status = "快速命令没有发送：" + Short(e.Message));
         ManageQuickCommandsCommand = new RelayCommand(() => ShowSettings?.Invoke("quick"));
         TerminalSettingsCommand = new RelayCommand(() => ShowSettings?.Invoke("terminal"));
+        CancelPasteCommand = new RelayCommand(() => { if (ShownTerminal?.CancelPaste() == true) Status = "正在停止粘贴：其余的不再发送"; });
         ToggleIdleCommand = new RelayCommand(() => { if (!CanIdle) return; idleChoice = !IsIdleOn; RaiseIdle(); });
         if (CanIdle) Appearance.Changed += OnIdlePreferences;
     }
@@ -58,11 +60,14 @@ public sealed partial class WorkspaceViewModel
     public bool HasTerminalSelection => ShownTerminal?.Control.HasSelection == true;
     public bool IsRecording => ShownTerminal?.IsRecording == true;
     public string RecordHeader => IsRecording ? "停止记录会话" : "记录会话到文件…";
+    /// <summary>A paste into the shown terminal has been going out for a while: it can be stopped.</summary>
+    public bool IsPasteSlow => ShownTerminal?.IsPasteSlow == true;
 
     void OnActiveTabChanged()
     {
         Raise(nameof(IsTerminalShown));
         Raise(nameof(IsRecording));
+        Raise(nameof(IsPasteSlow));
         Find.Retarget();
     }
 
@@ -126,6 +131,8 @@ public sealed partial class WorkspaceViewModel
     /// characters are always removed; "粘贴确认" decides whether the user sees the text first.</summary>
     async Task<string?> ReviewPasteAsync(TerminalTabViewModel tab, string text)
     {
+        // Not queued behind one the server has not taken yet: it would go out when that one is stopped.
+        if (tab.IsPasting) { Status = "上一次粘贴还没有发送完，这次没有粘贴"; return null; }
         if (text.Length > PasteGuard.MaxLength) { Status = "剪贴板内容超过 1 MiB，没有粘贴"; return null; }
         var review = PasteGuard.Review(text);
         if (review.Send.Length == 0) { Status = "剪贴板里只有控制字符，没有粘贴"; return null; }
@@ -138,6 +145,24 @@ public sealed partial class WorkspaceViewModel
         }
         else if (review.Removed > 0) Status = $"粘贴时去掉了 {review.Removed} 个控制字符";
         return disposed == 0 && Terminals.Contains(tab) ? review.Send : null;
+    }
+
+    /// <summary>Sends a paste the terminal has reviewed (see <see cref="ReviewPasteAsync"/>): in a way that can be stopped
+    /// while the server does not take it.</summary>
+    async Task SendPasteAsync(TerminalTabViewModel tab, string head, string text, bool bracketed)
+    {
+        try
+        {
+            switch (await tab.PasteAsync(head, text, bracketed, lifetime.Token))
+            {
+                case null when disposed == 0 && Terminals.Contains(tab): Status = "上一次粘贴还没有发送完，这次没有粘贴"; break;
+                case false when disposed == 0: Status = "已停止粘贴：已经发出的部分留在终端里，其余的没有发送"; break;
+            }
+        }
+        catch (OperationCanceledException) when (!lifetime.IsCancellationRequested) { if (disposed == 0) Status = "已停止粘贴，什么都没有发送"; }
+        catch (OperationCanceledException) { }
+        // The terminal's key handler does not wait for a paste: nothing may escape from here.
+        catch (Exception e) { if (disposed == 0) Status = "粘贴没有发送完：" + Short(e.Message); }
     }
 
     // ---------- quick commands ----------
@@ -182,7 +207,8 @@ public sealed partial class WorkspaceViewModel
         }
         // Confirmed for the shell the user was looking at, not for one started since.
         if (disposed != 0 || !Terminals.Contains(tab) || !tab.Control.IsLive || tab.Control.SessionId != shell) { Status = "终端已关闭，快速命令没有发送"; return; }
-        await tab.Control.SendInputAsync(command.Typed, lifetime.Token);
+        // Through the terminal's own writer, which says when it fails.
+        await tab.WriteAsync(command.Typed, byUser: true, lifetime.Token);
         // Writing to a shell that is going away fails silently.
         if (disposed != 0 || !tab.Control.IsLive || tab.Control.SessionId != shell) { Status = "终端已关闭，快速命令可能没有发送"; return; }
         Status = $"已输入快速命令“{command.Name}”";

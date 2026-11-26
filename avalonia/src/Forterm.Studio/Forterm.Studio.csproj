@@ -5,7 +5,7 @@
     <!-- The xshell/xftp entries start "Forterm(.exe)" next to themselves. -->
     <AssemblyName>Forterm</AssemblyName>
     <RootNamespace>Forterm.Studio</RootNamespace>
-    <Version>0.4.0-alpha.9</Version>
+    <Version>0.4.0-alpha.10</Version>
     <ApplicationIcon>Assets/forterm.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

@@ -98,8 +98,12 @@ public sealed class StudioBackup
         if (choice.Settings && content.Preferences is { } saved)
         {
             var now = Appearance.Current;
-            preferences = choice.Trusted ? saved : saved with
+            preferences = choice.Trusted ? saved with { BackgroundImage = now.BackgroundImage } : saved with
             {
+                // The picture is a file of this computer, not in the backup.
+                BackgroundImage = now.BackgroundImage,
+                // Locking stays as it is: a backup must not take it away.
+                LockMinutes = now.LockMinutes, LockAtStart = now.LockAtStart,
                 // What sends by itself, a program that is started, and where files are put: not from just any file.
                 IdleKeepAlive = now.IdleKeepAlive, IdleMinutes = now.IdleMinutes, IdleInput = now.IdleInput, IdleHours = now.IdleHours, IdleFullScreen = now.IdleFullScreen,
                 LocalShell = now.LocalShell, LocalShellArgs = now.LocalShellArgs, LocalTerminalType = now.LocalTerminalType, DownloadFolder = now.DownloadFolder,

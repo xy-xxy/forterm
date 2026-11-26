@@ -85,6 +85,7 @@
         <Button Classes="nav" Classes.active="{Binding IsLayout}" IsVisible="{Binding ShowLayoutSection}" Command="{Binding ShowSectionCommand}" CommandParameter="layout" Content="布局"/>
         <Button Classes="nav" Classes.active="{Binding IsMonitor}" IsVisible="{Binding ShowMonitorSection}" Command="{Binding ShowSectionCommand}" CommandParameter="monitor" Content="监控阈值"/>
         <Button Classes="nav" Classes.active="{Binding IsKeys}" IsVisible="{Binding ShowKeysSection}" Command="{Binding ShowSectionCommand}" CommandParameter="keys" Content="快捷键"/>
+        <Button Classes="nav" Classes.active="{Binding IsLock}" IsVisible="{Binding ShowLockSection}" Command="{Binding ShowSectionCommand}" CommandParameter="lock" Content="锁屏"/>
         <Button Classes="nav" Classes.active="{Binding IsLocal}" IsVisible="{Binding ShowLocalSection}" Command="{Binding ShowSectionCommand}" CommandParameter="local" Content="本地终端"/>
         <Button Classes="nav" Classes.active="{Binding IsAccess}" IsVisible="{Binding ShowAccessSection}" Command="{Binding ShowSectionCommand}" CommandParameter="access" Content="控制器接入"/>
         <Button Classes="nav" Classes.active="{Binding IsBackup}" IsVisible="{Binding ShowBackupSection}" Command="{Binding ShowSectionCommand}" CommandParameter="backup" Content="备份恢复"/>
@@ -172,6 +173,33 @@
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="界面动画"/><TextBlock Classes="hint" Text="切换、弹出、提示等过渡效果。关闭后界面立即变化，功能不受影响。"/></StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding UseMotion}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="界面动画"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[bgimage]}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0">
+                  <TextBlock Classes="h" Text="自定义背景图片"/>
+                  <TextBlock Classes="hint" Text="显示在主窗口各栏和终端后面。图片会复制到数据目录（最宽 3840 像素，存为 PNG，不带拍摄地点等附加信息），之后不再读取原文件；备份里不含图片。对话框和菜单不透明。"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Button Classes="secondary" Content="选择图片" Command="{Binding ChooseBackgroundCommand}" AutomationProperties.Name="选择背景图片"/>
+                  <Button Classes="secondary" Content="移除" Command="{Binding RemoveBackgroundCommand}" IsVisible="{Binding HasBackgroundImage}" AutomationProperties.Name="移除背景图片"/>
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="Auto,*,60" IsVisible="{Binding HasBackgroundImage}">
+                <TextBlock Text="图片透出" VerticalAlignment="Center" FontSize="12.5" Margin="0,0,16,0"/>
+                <Slider Grid.Column="1" Minimum="10" Maximum="90" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding BackgroundPercent}" VerticalAlignment="Center" AutomationProperties.Name="背景图片透出"/>
+                <TextBlock Grid.Column="2" Text="{Binding BackgroundPercentText}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+              </Grid>
+              <TextBlock Classes="hint" Text="{Binding BackgroundStatus}" IsVisible="{Binding HasBackgroundStatus}"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[opacity]}">
+            <Grid ColumnDefinitions="Auto,*,60">
+              <StackPanel Spacing="3" Margin="0,0,16,0" MaxWidth="260"><TextBlock Classes="h" Text="全局不透明度"/><TextBlock Classes="hint" Text="主窗口整体（含终端）能看到后面桌面的程度；100% 为不透明。设置窗口和对话框不变。"/></StackPanel>
+              <Slider Grid.Column="1" Minimum="30" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding OpacityPercent}" VerticalAlignment="Center" AutomationProperties.Name="全局不透明度"/>
+              <TextBlock Grid.Column="2" Text="{Binding OpacityText}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </Grid>
           </Border>
         </StackPanel>
@@ -270,6 +298,54 @@
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="栏宽"/><TextBlock Classes="hint" Text="拖动分隔条后会记住，用于之后打开的会话；双击分隔条也能恢复默认。"/></StackPanel>
               <Button Grid.Column="1" Classes="secondary" Content="恢复默认栏宽" Command="{Binding ResetWidthsCommand}" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[tabpos]}">
+            <Grid ColumnDefinitions="*,200">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="页签位置"/><TextBlock Classes="hint" Text="终端栏（终端和编辑器）的页签在上面还是下面。所有会话，包括本地终端，立即生效。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:SettingsViewModel.TabPositions}" SelectedItem="{Binding TabPosition}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="页签位置"/>
+            </Grid>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[tabrender]}">
+            <Grid ColumnDefinitions="*,200">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="标签渲染"/><TextBlock Classes="hint" Text="还没显示过的终端（后台会话、没点开的页签）什么时候开始接收输出。“显示时再开始”：输出先在连接里等着，超过约 2 MiB 后服务器暂停发送，正在运行的命令会停下来，直到你切换过去。“立即开始”：每个终端一打开就接收和处理输出，后台的命令不会被暂停，多占一些内存。对之后打开的终端生效。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:SettingsViewModel.TabRenders}" SelectedItem="{Binding TabRender}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="标签渲染"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- 锁屏 -->
+        <StackPanel IsVisible="{Binding IsLock}">
+          <Border Classes="card" IsVisible="{Binding Shown[lockpw]}">
+            <StackPanel Spacing="10">
+              <StackPanel Spacing="3">
+                <TextBlock Classes="h" Text="锁屏密码"/>
+                <TextBlock Classes="hint" Text="锁定后所有 Forterm 窗口都被遮住，按键和点击都到不了会话；会话照常保持（协议心跳、空闲保活、传输都继续）。密码只以加盐的慢哈希存放在系统钥匙串（Windows 为凭据管理器）里，不在设置文件和备份里。忘记密码只能退出程序，所有会话都会断开。"/>
+                <TextBlock Text="{Binding LockState}" FontSize="12.5" Margin="0,4,0,0"/>
+              </StackPanel>
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="12">
+                <TextBlock Text="现在的密码" VerticalAlignment="Center" FontSize="12.5" IsVisible="{Binding HasLockPassword}"/>
+                <TextBox Grid.Column="1" Text="{Binding LockCurrent}" PasswordChar="●" IsVisible="{Binding HasLockPassword}" AutomationProperties.Name="现在的锁屏密码"/>
+                <TextBlock Grid.Row="1" Text="新密码" VerticalAlignment="Center" FontSize="12.5"/>
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LockNew}" PasswordChar="●" PlaceholderText="至少 4 个字符" AutomationProperties.Name="新的锁屏密码"/>
+                <TextBlock Grid.Row="2" Text="再输入一次" VerticalAlignment="Center" FontSize="12.5"/>
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LockRepeat}" PasswordChar="●" AutomationProperties.Name="再输入一次锁屏密码"/>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="primary" Content="保存密码" Command="{Binding SaveLockCommand}" AutomationProperties.Name="保存锁屏密码"/>
+                <Button Classes="secondary" Content="移除密码" Command="{Binding RemoveLockCommand}" IsVisible="{Binding HasLockPassword}" ToolTip.Tip="需要填“现在的密码”" AutomationProperties.Name="移除锁屏密码"/>
+                <Button Classes="secondary" Content="立即锁定" Command="{Binding LockNowCommand}" IsVisible="{Binding HasLockPassword}" AutomationProperties.Name="立即锁定"/>
+              </StackPanel>
+              <TextBlock Classes="hint" Text="{Binding LockStatus}" IsVisible="{Binding HasLockStatus}"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[lockauto]}">
+            <Grid ColumnDefinitions="*,200" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+              <StackPanel Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="自动锁定"/><TextBlock Classes="hint" Text="多久没有在 Forterm 里按键、点击或移动鼠标后自动锁定。在别的程序里工作也算没有使用 Forterm。"/></StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:SettingsViewModel.LockChoices}" SelectedItem="{Binding LockChoice}" HorizontalAlignment="Stretch" VerticalAlignment="Center" AutomationProperties.Name="自动锁定"/>
+              <StackPanel Grid.Row="1" Spacing="3" Margin="0,0,16,0"><TextBlock Classes="h" Text="启动时锁定"/><TextBlock Classes="hint" Text="程序启动后先锁定。控制器唤醒的会话照常打开，解锁后才能看到。"/></StackPanel>
+              <ToggleSwitch Grid.Row="1" Grid.Column="1" IsChecked="{Binding LockAtStart}" OnContent="已启用" OffContent="不启用" AutomationProperties.Name="启动时锁定"/>
+              <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Classes="hint" Text="{Binding LockKeys}"/>
             </Grid>
           </Border>
         </StackPanel>
@@ -417,7 +493,7 @@
                   <CheckBox Content="连接、分组和隧道" IsChecked="{Binding RestoreConnections}"/>
                 </StackPanel>
                 <CheckBox IsChecked="{Binding RestoreTrusted}">
-                  <TextBlock TextWrapping="Wrap" FontSize="12" Text="这是我自己做的备份：同时恢复会自动执行或影响本机的内容（连接的初始执行、保活命令、算法偏好；空闲保活；本地终端程序；默认下载目录；粘贴确认、右键菜单、选中即复制；监控阈值；快捷键）"/>
+                  <TextBlock TextWrapping="Wrap" FontSize="12" Text="这是我自己做的备份：同时恢复会自动执行或影响本机的内容（连接的初始执行、保活命令、算法偏好；空闲保活；本地终端程序；默认下载目录；粘贴确认、右键菜单、选中即复制；监控阈值；快捷键；自动锁定和启动时锁定）"/>
                 </CheckBox>
                 <TextBlock Classes="hint" Text="{Binding PlanText}" TextWrapping="Wrap"/>
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">

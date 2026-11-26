@@ -7,6 +7,8 @@ import argparse, hashlib, json, os, pathlib, subprocess, sys, tempfile, threadin
 for stream in (sys.stdout, sys.stderr): stream.reconfigure(encoding='utf-8', errors='replace')  # a Windows console may not know Chinese
 root = pathlib.Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(); p.add_argument('--app', required=True); p.add_argument('--out', required=True); p.add_argument('--idle', action='store_true')
+# --looks: a background picture, the window 85 % opaque and the terminal tabs below, to see them drawn for real.
+p.add_argument('--looks', action='store_true')
 a = p.parse_args()
 app, out = pathlib.Path(a.app).resolve(), pathlib.Path(a.out).resolve(); out.mkdir(parents=True, exist_ok=True)
 windows = os.name == 'nt'
@@ -37,7 +39,16 @@ class Fixture:
 first_server, *others = servers = [Fixture() for _ in range(6)]
 ask, typed, url = first_server.ask, first_server.typed, first_server.url
 (data / 'known-hosts.json').write_text(json.dumps({f.key: f.fingerprint for f in servers}))
-(data / 'preferences.json').write_text(json.dumps({'IdleKeepAlive': a.idle, 'IdleMinutes': 1}))
+preferences = {'IdleKeepAlive': a.idle, 'IdleMinutes': 1}
+if a.looks:
+    import struct, zlib
+    def chunk(kind, body): return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body) & 0xffffffff)
+    width, height = 640, 400
+    rows = b''.join(b'\0' + b''.join(bytes((40 + x * 160 // width, 90 + y * 120 // height, 170, 255)) for x in range(width)) for y in range(height))
+    picture = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
+    (data / 'background-0a1b2c3d.png').write_bytes(picture)
+    preferences.update({'BackgroundImage': 'background-0a1b2c3d.png', 'BackgroundStrength': 0.4, 'WindowOpacity': 0.85, 'TabsAtBottom': True})
+(data / 'preferences.json').write_text(json.dumps(preferences))
 def programs():
     if windows: return [l for l in subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Forterm.exe', '/FO', 'CSV', '/NH'], capture_output=True, text=True).stdout.splitlines() if 'Forterm.exe' in l]
     return subprocess.run(['pgrep', '-f', exe('Forterm')], capture_output=True, text=True).stdout.split()

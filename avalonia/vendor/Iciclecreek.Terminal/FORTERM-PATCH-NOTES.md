@@ -21,3 +21,7 @@ Additions live in TerminalView.Forterm.cs, with forwarding members on TerminalCo
 - `HighlightProvider`: colours text in the default foreground on the default background, normal screen only. Cells with colours of their own, inverse cells and reverse video are left alone.
 - Scrollback search holds the terminal lock while it reads the buffer. `RefreshSearch`, `SearchMatchCount` and `SearchCurrentMatch` forward the XTerm.NET additions.
 - `ReadCursorLine` and `OutputWritten`: the line the cursor is on, with the output position it belongs to, so a recording can start in the middle of a session without losing or repeating output.
+
+## Studio 0.4.0-alpha.10 (paste-sender-v18)
+
+- `PasteSender`: when set, a paste that `PasteFilter` let through is handed to the host instead of being written: the keys that delete a keyboard selection the paste replaces (or ""), the text, and whether the program asked for bracketed paste (the text is not wrapped yet). Studio uses it to send a long paste in pieces that can be stopped while the server does not read, and to close a bracket it opened. The view calls it while it holds its own input semaphore, so the paste stays in line with keys typed before and after it, on the caller's thread. Null by default: the view writes the paste itself, as before (and as Forterm.Desktop does).

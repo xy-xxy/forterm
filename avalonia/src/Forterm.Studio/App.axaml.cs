@@ -48,6 +48,8 @@ public sealed partial class App : Application
             if (settingsProblem != null) startupNotice ??= "设置文件无法读取，本次使用默认设置；修改设置时原文件会改名保留：" + settingsProblem;
             var main = MainWindow.Create(knownHosts, library, credentials, accounts, commands);
             if (startupNotice != null) main.ViewModel.Notice = startupNotice;
+            // "启动时锁定": locked before anything is shown.
+            if (Forterm.Studio.Services.Appearance.Current.LockAtStart) Forterm.Studio.Services.AppLock.LockAtStart();
             desktop.MainWindow = main;
             var lifetime = new CancellationTokenSource();
             desktop.Exit += (_, _) => lifetime.Cancel();

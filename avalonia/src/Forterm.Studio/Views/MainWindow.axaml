@@ -31,6 +31,13 @@
 
   <LayoutTransformControl Name="Scaler">
   <Grid RowDefinitions="36,Auto,*">
+    <!-- Everything but the lock screen: hidden while locked, so that nothing of it can be read or pressed (also not by a
+         screen reader). -->
+    <Grid Name="ContentLayer" Grid.RowSpan="3" RowDefinitions="36,Auto,*">
+    <!-- "自定义背景图片": under everything; the columns let it show through -->
+    <Image Name="BackdropImage" Grid.RowSpan="3" Stretch="UniformToFill" IsHitTestVisible="False" IsVisible="False"/>
+    <!-- terminals that start before they are first shown ("标签渲染") are laid out here for a moment, unseen -->
+    <Canvas Name="WarmUpHost" Grid.Row="2" Opacity="0" IsHitTestVisible="False" ClipToBounds="True"/>
     <!-- Title bar: window controls inset, app icons, session tabs, tools. Empty space drags the window. -->
     <Border Name="TitleBar" Background="{DynamicResource St.TitleBar}">
       <Grid ColumnDefinitions="Auto,Auto,*,Auto">
@@ -138,6 +145,9 @@
         </DockPanel>
       </Border>
     </Panel>
+    </Grid>
+    <!-- "锁屏": over everything -->
+    <v:LockView Name="LockLayer" Grid.RowSpan="3"/>
   </Grid>
   </LayoutTransformControl>
 </Window>

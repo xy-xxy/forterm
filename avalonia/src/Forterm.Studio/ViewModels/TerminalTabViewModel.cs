@@ -59,6 +59,53 @@ public sealed class TerminalTabViewModel(string title, StudioTerminalControl con
     public Task WriteAsync(string text, bool byUser, CancellationToken ct) =>
         watch?.SendAsync(System.Text.Encoding.UTF8.GetBytes(text), byUser, ct) ?? Task.CompletedTask;
 
+    CancellationTokenSource? paste;
+    bool pasteSlow;
+
+    /// <summary>A paste is still going out: the server has not taken all of it.</summary>
+    public bool IsPasting => paste != null;
+    /// <summary>It has been going out for a while: time to offer to stop it.</summary>
+    public bool IsPasteSlow => pasteSlow;
+    /// <summary>How long a paste goes out before it can be stopped from the window.</summary>
+    internal static TimeSpan SlowPaste { get; set; } = TimeSpan.FromMilliseconds(800);
+
+    /// <summary>Stops what of the paste has not gone out yet. The bar goes at once; a bracket that was opened still has to
+    /// be closed, when the server takes it.</summary>
+    public bool CancelPaste()
+    {
+        if (paste is not { IsCancellationRequested: false } current) return false;
+        current.Cancel();
+        if (pasteSlow) { pasteSlow = false; Raise(nameof(IsPasteSlow)); }
+        return true;
+    }
+
+    /// <summary>Sends a paste the user agreed to (see <see cref="IdleWatch.SendPasteAsync"/>). One at a time: null when
+    /// another is still going out, or there is no shell. False = stopped by the user.</summary>
+    public async Task<bool?> PasteAsync(string head, string text, bool bracketed, CancellationToken lifetime)
+    {
+        if (watch is not { } to || paste != null) return null;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        paste = cancel;
+        Raise(nameof(IsPasting));
+        _ = ShowSlowAsync(cancel);
+        try { return await to.SendPasteAsync(head, text, bracketed, cancel.Token, lifetime); }
+        finally
+        {
+            paste = null;
+            pasteSlow = false;
+            Raise(nameof(IsPasting));
+            Raise(nameof(IsPasteSlow));
+        }
+    }
+
+    async Task ShowSlowAsync(CancellationTokenSource which)
+    {
+        await Task.Delay(SlowPaste);
+        if (!ReferenceEquals(paste, which) || which.IsCancellationRequested || pasteSlow) return;
+        pasteSlow = true;
+        Raise(nameof(IsPasteSlow));
+    }
+
     /// <summary>"空闲保活" of this terminal; null without a connection.</summary>
     public IdleKeeper? Idle { get; private set; }
     /// <summary>There is something to keep: the shell has not ended.</summary>

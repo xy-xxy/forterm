@@ -6,7 +6,7 @@
     <Setter Property="Template">
       <ControlTemplate>
         <DockPanel Background="{TemplateBinding Background}">
-          <Grid DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto" Margin="6,0,4,0">
+          <Grid Name="PART_Header" DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto" Margin="6,0,4,0">
             <ContentPresenter Content="{TemplateBinding Header}" VerticalAlignment="Center"/>
             <Button Grid.Column="2" Classes="pane-icon" Command="{TemplateBinding MaximizeCommand}" ToolTip.Tip="最大化 / 还原此栏">
               <Panel>
@@ -22,6 +22,7 @@
         </DockPanel>
       </ControlTemplate>
     </Setter>
+    <Style Selector="^[HeaderAtBottom=True] /template/ Grid#PART_Header"><Setter Property="DockPanel.Dock" Value="Bottom"/></Style>
   </ControlTheme>
 
   <c:IndentConverter x:Key="TreeIndent"/>

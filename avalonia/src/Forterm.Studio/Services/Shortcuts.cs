@@ -45,7 +45,10 @@ public static class Shortcuts
     public static readonly Shortcut ZoomReset = Zoom("zoomReset", "终端文字恢复默认大小", TerminalKeyGestures.ResetZoom);
     static Shortcut Zoom(string id, string title, IReadOnlyList<KeyGesture> gestures) => new(id, title, gestures[0], gestures);
 
-    public static readonly Shortcut[] All = [Palette, NewTerminal, CloseTab, Home, Settings, NextSession, PreviousSession, Find, ZoomIn, ZoomOut, ZoomReset];
+    /// <summary>"锁屏". ⌘⇧L on macOS (⌘L is the library); Ctrl+Shift+K elsewhere (Ctrl+Shift+L is).</summary>
+    public static readonly Shortcut Lock = new("lock", "锁定 Forterm", new(Mac ? Key.L : Key.K, Mac ? KeyModifiers.Meta | KeyModifiers.Shift : Main));
+
+    public static readonly Shortcut[] All = [Palette, NewTerminal, CloseTab, Home, Settings, NextSession, PreviousSession, Find, Lock, ZoomIn, ZoomOut, ZoomReset];
 
     /// <summary>Cmd+1 … Cmd+9 on macOS: the first to the ninth session; 0 when it is not one of them. Other
     /// systems have no modifier left for digits: Ctrl+Alt writes characters there, Ctrl+Shift and Alt are the

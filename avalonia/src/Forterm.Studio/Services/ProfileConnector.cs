@@ -66,7 +66,10 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
             {
                 var hop = chain[i];
                 bool isTarget = i == chain.Count - 1;
-                var options = OptionsFor(hop) with { Jump = previous, Proxy = i == 0 ? firstHopProxy : null, Trace = isTarget ? trace : null };
+                // A jump host gets a trace of its own: when it ends first, the target's report says so in its words.
+                SshTrace? hopTrace = isTarget ? trace : trace == null ? null : new SshTrace();
+                if (!isTarget) foreach (var named in chain) { hopTrace?.Conceal(named.Host); hopTrace?.Conceal(named.User); hopTrace?.Conceal(named.Name); }
+                var options = OptionsFor(hop) with { Jump = previous, Proxy = i == 0 ? firstHopProxy : null, Trace = hopTrace };
                 var next = await ConnectOneAsync(hop, options, isTarget ? targetSecrets : null, !isTarget, persistHostKeys, ct);
                 // The next hop holds its own lease on the jump transport; drop ours.
                 previous?.Dispose();

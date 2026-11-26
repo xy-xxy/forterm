@@ -29,6 +29,7 @@ namespace Iciclecreek.Terminal
 
 
         private Func<string, Task<string?>>? _pasteFilter;
+        private Func<string, string, bool, Task>? _pasteSender;
         private Func<string, string>? _copyFilter;
         private Func<string, System.Collections.Generic.IReadOnlyList<TextHighlight>>? _highlightProvider;
 
@@ -37,6 +38,13 @@ namespace Iciclecreek.Terminal
         {
             get => _pasteFilter;
             set { _pasteFilter = value; if (_terminalView != null) _terminalView.PasteFilter = value; }
+        }
+
+        /// <inheritdoc cref="TerminalView.PasteSender"/>
+        public Func<string, string, bool, Task>? PasteSender
+        {
+            get => _pasteSender;
+            set { _pasteSender = value; if (_terminalView != null) _terminalView.PasteSender = value; }
         }
 
         /// <inheritdoc cref="TerminalView.CopyFilter"/>
@@ -915,6 +923,7 @@ namespace Iciclecreek.Terminal
             {
                 _terminalView.Options = Options ?? new XTerm.Options.TerminalOptions();
                 _terminalView.PasteFilter = _pasteFilter;
+                _terminalView.PasteSender = _pasteSender;
                 _terminalView.CopyFilter = _copyFilter;
                 _terminalView.HighlightProvider = _highlightProvider;
                 _terminalView.PropertyChanged += OnTerminalViewPropertyChanged;

@@ -104,8 +104,11 @@ public sealed partial class WorkspaceView : UserControl
             tree.Classes.Set("times", p.FileDetails && width >= 380);
         }
         tree.SizeChanged += (_, _) => Details(Appearance.Current);
-        AttachedToVisualTree += (_, _) => { Appearance.Changed += Details; Details(Appearance.Current); };
-        DetachedFromVisualTree += (_, _) => Appearance.Changed -= Details;
+        // "页签位置" of the terminal column.
+        var terminalPane = this.FindControl<StudioPane>("TerminalPane")!;
+        void Tabs(StudioPreferences p) => terminalPane.HeaderAtBottom = p.TabsAtBottom;
+        AttachedToVisualTree += (_, _) => { Appearance.Changed += Details; Details(Appearance.Current); Appearance.Changed += Tabs; Tabs(Appearance.Current); };
+        DetachedFromVisualTree += (_, _) => { Appearance.Changed -= Details; Appearance.Changed -= Tabs; };
         WireTerminal();
         WireFiles(tree);
         WireLinks();

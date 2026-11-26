@@ -34,6 +34,15 @@ namespace Iciclecreek.Terminal
         public Func<string, Task<string?>>? PasteFilter { get; set; }
 
         /// <summary>
+        /// Sends a paste that <see cref="PasteFilter"/> let through, instead of the view writing it. Gets what
+        /// goes in front of it (the keys that delete a keyboard selection the paste replaces, or ""), the
+        /// text, and whether the program asked for bracketed paste; the text is not wrapped yet. Lets the host
+        /// send a long paste in a way that can be stopped. It is called in turn with the view's own input, which waits until
+        /// it returns. Without it the view writes the paste itself.
+        /// </summary>
+        public Func<string, string, bool, Task>? PasteSender { get; set; }
+
+        /// <summary>
         /// Adjusts the selected text before <see cref="CopyAsync"/> puts it on the clipboard.
         /// </summary>
         public Func<string, string>? CopyFilter { get; set; }
@@ -187,9 +196,29 @@ namespace Iciclecreek.Terminal
             if (string.IsNullOrEmpty(reviewed) || _ptyConnection == null || SessionId != session)
                 return;
 
+            var deletion = immediate ? TakeKeyboardSelectionDeletion() : string.Empty;
+            if (PasteSender is { } sender)
+            {
+                // In line with the keys typed before it, and ahead of those typed after it, as SendToPtyAsync would be.
+                var connection = _ptyConnection;
+                bool bracketed = _terminal.BracketedPasteMode;
+                // On the caller's thread: the sender is the host's, and may touch its own UI.
+                await _semaphore.WaitAsync();
+                try
+                {
+                    if (ReferenceEquals(_ptyConnection, connection))
+                        await sender(deletion, reviewed, bracketed);
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+                return;
+            }
+
             if (_terminal.BracketedPasteMode)
                 reviewed = $"\u001b[200~{reviewed}\u001b[201~";
-            await SendToPtyAsync((immediate ? TakeKeyboardSelectionDeletion() : string.Empty) + reviewed);
+            await SendToPtyAsync(deletion + reviewed);
         }
     }
 }

@@ -26,35 +26,43 @@ public sealed class DialogInteraction(Func<Window?> owner) : IStudioInteraction
     public Task<bool> EditConnectionAsync(ConnectionEditorViewModel editor) =>
         Dispatcher.UIThread.InvokeAsync(() => ConnectionEditorDialog.ShowAsync(owner(), editor));
 
+    /// <summary>The system's pickers cannot be covered by the lock screen: what one gives back after Studio locked, or
+    /// while it is locked, is not used (somebody else may have chosen it).</summary>
+    static bool Locked(int locks) => AppLock.IsLocked || AppLock.Locks != locks;
+
     public Task<string?> PickOpenFileAsync(string title) => Dispatcher.UIThread.InvokeAsync(async () =>
     {
         if (owner() is not { } window) return null;
+        int locks = AppLock.Locks;
         var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = title, AllowMultiple = false });
-        try { return files.Count == 0 ? null : files[0].TryGetLocalPath(); }
+        try { return files.Count == 0 || Locked(locks) ? null : files[0].TryGetLocalPath(); }
         finally { foreach (var file in files) file.Dispose(); }
     });
 
     public Task<string[]> PickOpenFilesAsync(string title) => Dispatcher.UIThread.InvokeAsync(async () =>
     {
         if (owner() is not { } window) return Array.Empty<string>();
+        int locks = AppLock.Locks;
         var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = title, AllowMultiple = true });
-        try { return files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray(); }
+        try { return Locked(locks) ? Array.Empty<string>() : files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray(); }
         finally { foreach (var file in files) file.Dispose(); }
     });
 
     public Task<string?> PickFolderAsync(string title) => Dispatcher.UIThread.InvokeAsync(async () =>
     {
         if (owner() is not { } window) return null;
+        int locks = AppLock.Locks;
         var folders = await window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = title, AllowMultiple = false });
-        try { return folders.Count == 0 ? null : folders[0].TryGetLocalPath(); }
+        try { return folders.Count == 0 || Locked(locks) ? null : folders[0].TryGetLocalPath(); }
         finally { foreach (var folder in folders) folder.Dispose(); }
     });
 
     public Task<string?> PickSaveFileAsync(string title, string suggestedName) => Dispatcher.UIThread.InvokeAsync(async () =>
     {
         if (owner() is not { } window) return null;
+        int locks = AppLock.Locks;
         var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = title, SuggestedFileName = suggestedName, ShowOverwritePrompt = true });
-        try { return file?.TryGetLocalPath(); }
+        try { return Locked(locks) ? null : file?.TryGetLocalPath(); }
         finally { file?.Dispose(); }
     });
 

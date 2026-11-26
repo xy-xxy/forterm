@@ -18,10 +18,30 @@ int Fail(int code,string text)
 {
     if(OperatingSystem.IsWindows()&&Environment.UserInteractive&&!args.Any(a=>a.Equals("--diagnose",StringComparison.OrdinalIgnoreCase)))
     {
-        // Started hidden, the box may be invisible: it is waited for, but not for ever.
-        var box=new Thread(()=>MessageBoxW(0,text,"Forterm",0x10|0x10000)){IsBackground=true};box.Start();box.Join(TimeSpan.FromSeconds(60));
+        // A controller may start the entry hidden, and Windows shows the first window of a program the way its starter
+        // asked. A window of no size takes that, so the box is seen. Still it is waited for, but not for ever.
+        TakeHiddenStart();
+        var box=new Thread(()=>MessageBoxW(0,text,"Forterm",0x10|0x10000|0x40000)){IsBackground=true};box.Start();box.Join(TimeSpan.FromSeconds(60));
     }
     return code;
 }
 [System.Runtime.InteropServices.DllImport("user32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern int MessageBoxW(nint owner,string text,string caption,uint type);
+
+// Only when the starter asked for hidden or minimised (STARTF_USESHOWWINDOW with SW_HIDE, SW_SHOWMINIMIZED, SW_MINIMIZE,
+// SW_SHOWMINNOACTIVE or SW_FORCEMINIMIZE): otherwise nothing is to be taken, and nothing is created.
+static void TakeHiddenStart()
+{
+    var info=new StartupInfo{Size=System.Runtime.InteropServices.Marshal.SizeOf<StartupInfo>()};GetStartupInfoW(ref info);
+    if((info.Flags&1)==0||info.ShowWindow is not (0 or 2 or 6 or 7 or 11))return;
+    nint window=CreateWindowExW(0x80,"STATIC","",0x80000000,0,0,0,0,0,0,0,0);
+    if(window==0)return;
+    ShowWindow(window,1);DestroyWindow(window);
+}
+[System.Runtime.InteropServices.DllImport("kernel32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern void GetStartupInfoW(ref StartupInfo info);
+[System.Runtime.InteropServices.DllImport("user32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern nint CreateWindowExW(uint exStyle,string className,string title,uint style,int x,int y,int width,int height,nint parent,nint menu,nint instance,nint param);
+[System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool ShowWindow(nint window,int show);
+[System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool DestroyWindow(nint window);
+
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential,CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+struct StartupInfo{public int Size;public nint Reserved,Desktop,Title;public int X,Y,Width,Height,Columns,Rows,Fill,Flags;public short ShowWindow,Reserved2Size;public nint Reserved2,Input,Output,Error;}
 

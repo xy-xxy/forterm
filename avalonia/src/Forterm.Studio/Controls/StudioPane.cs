@@ -11,8 +11,11 @@ public sealed class StudioPane : HeaderedContentControl
     public static readonly StyledProperty<ICommand?> CloseCommandProperty = AvaloniaProperty.Register<StudioPane, ICommand?>(nameof(CloseCommand));
     public static readonly StyledProperty<ICommand?> MaximizeCommandProperty = AvaloniaProperty.Register<StudioPane, ICommand?>(nameof(MaximizeCommand));
     public static readonly StyledProperty<bool> IsMaximizedProperty = AvaloniaProperty.Register<StudioPane, bool>(nameof(IsMaximized));
+    /// <summary>"页签位置": the header with the tabs below the content.</summary>
+    public static readonly StyledProperty<bool> HeaderAtBottomProperty = AvaloniaProperty.Register<StudioPane, bool>(nameof(HeaderAtBottom));
 
     public ICommand? CloseCommand { get => GetValue(CloseCommandProperty); set => SetValue(CloseCommandProperty, value); }
     public ICommand? MaximizeCommand { get => GetValue(MaximizeCommandProperty); set => SetValue(MaximizeCommandProperty, value); }
     public bool IsMaximized { get => GetValue(IsMaximizedProperty); set => SetValue(IsMaximizedProperty, value); }
+    public bool HeaderAtBottom { get => GetValue(HeaderAtBottomProperty); set => SetValue(HeaderAtBottomProperty, value); }
 }

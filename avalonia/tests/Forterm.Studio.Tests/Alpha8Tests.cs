@@ -113,9 +113,13 @@ public sealed class Alpha8Tests
             find.Replacement = "$2=$1";
             find.ReplaceAllCommand.Execute(null);
             Assert.Contains("8080=Port", tab.Document.Text);
-            find.Query = "(?<=a)b";
-            Assert.Contains("不支持", find.Status);
-            Assert.True(find.IsBad);
+            // Looking around and back-references work too (alpha.10).
+            find.Query = "(?<==)port";
+            Assert.Equal(1, find.Matches.Count);
+            Assert.False(find.IsBad);
+            find.Query = "(\\w)\\1";
+            Assert.Equal(1, find.Matches.Count); // "pp" of "support"
+            Assert.False(find.IsBad);
             find.Query = "(";
             Assert.Contains("有误", find.Status);
             find.Query = "x*"; // matches nothing everywhere
@@ -1678,7 +1682,7 @@ public sealed class Alpha8Tests
     [InlineData("[sudo] password for deploy: ", false)]
     [InlineData("> ", false)]
     [InlineData("quote> ", false)]
-    [InlineData("❯ ", false)]
+    [InlineData("❯ ", true)]
     [InlineData("? Pick one ❯ ", false)]
     [InlineData("<a b>", false)]
     [InlineData("<y/n>", false)]

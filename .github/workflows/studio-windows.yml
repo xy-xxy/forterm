@@ -48,6 +48,9 @@ jobs:
           if ($bad.ExitCode -ne 2) { throw "xftp should forward exit code 2 for rejected arguments" }
           $diag = Start-Process "$out/forterm-diagnose.exe" -ArgumentList '-url', 'sftp://t:p@h:22' -Wait -PassThru -NoNewWindow
           if ($diag.ExitCode -ne 0) { throw "forterm-diagnose failed" }
+      - name: An entry started hidden still says why it stops
+        shell: pwsh
+        run: ./tooling/check-entry-hidden.ps1 -Payload artifacts/studio-ci-win-x64
       - name: Build the installer
         shell: pwsh
         run: |
@@ -75,6 +78,12 @@ jobs:
         run: |
           tooling/fixture-venv/Scripts/python tooling/native-check.py --app artifacts/studio-ci-win-x64 --out ../test-results/studio/native --idle
           if ($LASTEXITCODE -ne 0) { throw "native check failed" }
+      - name: The same with a background picture, a see-through window and the tabs below
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          tooling/fixture-venv/Scripts/python tooling/native-check.py --app artifacts/studio-ci-win-x64 --out ../test-results/studio/native-looks --looks
+          if ($LASTEXITCODE -ne 0) { throw "native check with the looks failed" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -77,8 +77,20 @@ public sealed partial class StudioTerminalControl : TerminalControl
         if (!templateApplied || View is not { Terminal: not null } view) return (false, false, -1);
         var line = view.ReadCursorLine();
         var row = line.Rows[line.Row];
-        string before = string.Concat(line.Rows.Take(line.Row).SelectMany(r => r).Concat(row.Take(line.Column))), after = string.Concat(row.Skip(line.Column).Concat(line.Rows.Skip(line.Row + 1).SelectMany(r => r)));
-        return (line.Alternate, after.Trim().Length == 0 && LooksLikePrompt(before), line.Written);
+        string before = string.Concat(line.Rows.Take(line.Row).SelectMany(r => r).Concat(row.Take(line.Column))), below = string.Concat(line.Rows.Skip(line.Row + 1).SelectMany(r => r));
+        var rest = row.Skip(line.Column).ToArray();
+        bool nothingAfter = below.Trim().Length == 0 && (string.Concat(rest).Trim().Length == 0 || IsRightPrompt(rest, line.Column, view.Terminal.Cols));
+        return (line.Alternate, nothingAfter && LooksLikePrompt(before), line.Written);
+    }
+
+    /// <summary>What follows the cursor is a prompt on the right (zsh's RPROMPT: a clock, the directory, the branch): apart
+    /// from the cursor, and against the right edge. What the user typed and stepped back over is right behind the cursor,
+    /// and seldom reaches the edge.</summary>
+    internal static bool IsRightPrompt(IReadOnlyList<string> rest, int column, int columns)
+    {
+        int gap = 0;
+        while (gap < rest.Count && rest[gap] is " " or "") gap++;
+        return gap >= 2 && gap < rest.Count && column + rest.Count >= columns - 1 && rest.Count - gap <= columns / 2;
     }
 
     /// <summary>"root@web:~# ", "[deploy@web ~]$ ", "bash-5.1$ ", "web% ", "web /etc # " — not "[Y/n] ", "Password: ", a
@@ -87,7 +99,15 @@ public sealed partial class StudioTerminalControl : TerminalControl
     internal static bool LooksLikePrompt(string before)
     {
         string t = before.Trim();
-        if (t.Length == 0 || t[^1] is not ('$' or '#' or '%')) return false;
+        if (t.Length == 0 || t.Contains('?')) return false;
+        // starship and pure: "❯", after the directory and the branch, or on a line of its own.
+        if (t[^1] == '❯') return t.Length == 1 || t[^2] == ' ';
+        // oh-my-zsh's own theme: "➜  web git:(main) ✗".
+        if (t[0] == '➜') return OhMyZsh().IsMatch(t);
+        // cmd ("C:\Users\deploy>"), PowerShell ("PS C:\Users\deploy>") and fish ("deploy@web ~>"). Not a word before
+        // it: zsh says what is not finished that way ("quote>", "for>"), and so do menus.
+        if (t[^1] == '>') return t.Length > 1 && t[^2] != '>' && (WindowsPrompt().IsMatch(t[..^1]) || WhoAndWhere().IsMatch(t[..^1]));
+        if (t[^1] is not ('$' or '#' or '%')) return false;
         if (t.Length == 1) return true;
         if (t.Contains('?')) return false;
         string head = t[..^1];
@@ -101,6 +121,12 @@ public sealed partial class StudioTerminalControl : TerminalControl
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^(\([^)]{1,60}\) ?)?[\w.-]{1,64}@[\w.-]{1,255}[: ]~?(/.{0,400})?$", System.Text.RegularExpressions.RegexOptions.NonBacktracking)]
     private static partial System.Text.RegularExpressions.Regex WhoAndWhere();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(PS ([A-Za-z]:\\|/)|[A-Za-z]:\\)[^<>|*""]{0,400}$", System.Text.RegularExpressions.RegexOptions.NonBacktracking)]
+    private static partial System.Text.RegularExpressions.Regex WindowsPrompt();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^➜ {1,2}\S{1,255}( git:\([^)\s]{1,255}\))?( ✗)?$", System.Text.RegularExpressions.RegexOptions.NonBacktracking)]
+    private static partial System.Text.RegularExpressions.Regex OhMyZsh();
 
     TerminalView? View => this.FindDescendantOfType<TerminalView>();
 
@@ -150,6 +176,16 @@ public sealed partial class StudioTerminalControl : TerminalControl
         FindRequested();
     }
 
+    int clears;
+
+    /// <summary>Changes whenever what the buffer holds may have changed: output, lines added or taken away, a new size,
+    /// "清空显示".</summary>
+    public (long, int, int, int, int, int) ContentStamp => templateApplied && Terminal is { } t
+        ? (OutputWritten, t.Buffer.Lines.Length, t.Buffer.YBase + t.Buffer.Y, t.Cols, t.Rows, clears) : (-1, 0, 0, 0, 0, clears);
+
+    /// <summary>"清空显示（含回滚）".</summary>
+    public new void ClearScreen() { clears++; base.ClearScreen(); }
+
     /// <summary>Selects the whole buffer (what the program printed, including scrollback).</summary>
     public void SelectAll()
     {
@@ -195,7 +231,9 @@ public sealed partial class StudioTerminalControl : TerminalControl
         var variant = (ThemeVariant?)ActualThemeVariant ?? Avalonia.Application.Current?.ActualThemeVariant;
         bool dark = variant != ThemeVariant.Light;
         string scheme = Appearance.Current.TerminalScheme;
-        string key = scheme == TerminalSchemes.Auto ? "auto-" + (dark ? "dark" : "light") : scheme;
+        // A background picture shows through the terminal's own background too.
+        double through = Appearance.SeeThrough(Appearance.Current);
+        string key = (scheme == TerminalSchemes.Auto ? "auto-" + (dark ? "dark" : "light") : scheme) + "/" + through.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var palette = TerminalSchemes.PaletteFor(scheme, dark);
         if (key == appliedScheme) { ApplyHighlight(palette); return; }
         appliedScheme = key;
@@ -204,7 +242,7 @@ public sealed partial class StudioTerminalControl : TerminalControl
         // Theme first (it re-seeds the whole palette), then the control's own colours.
         if (Options is { } options) options.Theme = palette;
         if (templateApplied && Terminal is { Options: { } live }) live.Theme = palette;
-        Background = new SolidColorBrush(Parse(palette.Background, dark ? DarkBackground : LightBackground));
+        Background = new SolidColorBrush(Parse(palette.Background, dark ? DarkBackground : LightBackground), 1 - through);
         Foreground = new SolidColorBrush(Parse(palette.Foreground, dark ? Colors.White : Colors.Black));
         CursorColor = Parse(palette.Cursor, dark ? Colors.White : Colors.Black);
         SelectionBrush = new SolidColorBrush(TerminalSchemes.SelectionOverlay(palette));
@@ -227,6 +265,8 @@ public sealed partial class StudioTerminalControl : TerminalControl
     /// <summary>Stops following preference changes, then releases the terminal.</summary>
     public new void Dispose()
     {
+        IsDisposed = true;
+        TerminalWarmUp.Release(this);
         Appearance.Changed -= OnAppearance;
         base.Dispose();
     }
@@ -237,7 +277,16 @@ public sealed partial class StudioTerminalControl : TerminalControl
     public void AttachWhenReady(IPtyConnection connection)
     {
         try { AttachConnection(connection); }
-        catch (InvalidOperationException) { pending = connection; }
+        catch (InvalidOperationException) { pending = connection; TerminalWarmUp.Schedule(this); }
+    }
+
+    public bool IsDisposed { get; private set; }
+
+    protected override void OnSizeChanged(SizeChangedEventArgs e)
+    {
+        base.OnSizeChanged(e);
+        // Where terminals are on screen: one laid out unseen ("标签渲染") gets the same size.
+        if (Parent is not Canvas) TerminalWarmUp.Seen(e.NewSize);
     }
 
     public bool HasPendingConnection => pending != null;

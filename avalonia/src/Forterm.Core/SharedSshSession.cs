@@ -55,7 +55,30 @@ public sealed partial class SharedSshSession : IDisposable
         if (options.KeepAliveEnabled) _ = KeepAlive();
     }
     void OnPeerEnded() => ThreadPool.QueueUserWorkItem(_ => FailTransport(Explained("SSH连接已中断；已停止此连接，不自动重用凭据。")));
-    string Explained(string otherwise) => options.Trace?.Explanation is { Length: > 0 } explained ? explained : otherwise;
+    string Explained(string otherwise)
+    {
+        // Through a jump host (and only with a trace, as Studio connects): when the jump host's connection ended, that is
+        // what ended this one.
+        // Not once this transport has ended for its own reason: letting go of the jump host then takes it down too.
+        if (Volatile.Read(ref transportDisposed) == 0 && options.Trace is { } trace && options.Jump is { } jump && JumpDown(jump) is { } down && Volatile.Read(ref transportDisposed) == 0)
+            trace.UpstreamEnded(down.Number is var n && JumpCount > 1 ? $"第 {n} 级跳板机" : "跳板机", down.options.Trace, down.CloseReason);
+        return options.Trace?.Explanation is { Length: > 0 } explained ? explained : otherwise;
+    }
+    /// <summary>The first jump host of the chain that is down, from the one nearest to the start; null when all are up.
+    /// Its end and this one come at about the same moment, so a little time is given for it to show.</summary>
+    static SharedSshSession? JumpDown(SharedSshSession nearest)
+    {
+        static bool Down(SharedSshSession s) => !s.IsConnected || s.CloseReason != null;
+        for (int waited = 0; waited < 500 && !Down(nearest); waited += 25) Thread.Sleep(25);
+        if (!Down(nearest)) return null;
+        var down = nearest;
+        while (down.options.Jump is { } below && Down(below)) down = below;
+        return down;
+    }
+    /// <summary>1 for the jump host the chain begins with.</summary>
+    int Number => options.Jump is { } below ? below.Number + 1 : 1;
+    /// <summary>How many jump hosts this connection runs through.</summary>
+    int JumpCount => options.Jump is { } jump ? jump.Number : 0;
     async Task KeepAlive()
     {
         try { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.KeepAliveSeconds)); while (await timer.WaitForNextTickAsync(transportClosed.Token)) { await client.ProbeTransportAsync(TimeSpan.FromSeconds(options.KeepAliveSeconds), 3, transportClosed.Token); } }

@@ -14,6 +14,10 @@ public sealed class TerminalFindViewModel : ObservableObject
     readonly Func<StudioTerminalControl?> target;
     StudioTerminalControl? control;
     bool open, caseSensitive;
+    /// <summary>What the terminal held when it was last searched; null = search again.</summary>
+    (long, int, int, int, int, int)? scanned;
+    /// <summary>How often a step read the scrollback again.</summary>
+    internal int Scans { get; private set; }
     string text = "", summary = "";
 
     public TerminalFindViewModel(Func<StudioTerminalControl?> target)
@@ -80,10 +84,12 @@ public sealed class TerminalFindViewModel : ObservableObject
 
     void Search()
     {
+        scanned = null;
         if (control is not { } c || !open) return;
         if (text.Length == 0) { c.ClearSearch(); Summary = ""; return; }
         // The newest match first: that is what is on the screen.
         if (c.FindInBuffer(text, Options) > 0) c.FindPrevious();
+        scanned = c.ContentStamp;
         Describe(c);
     }
 
@@ -92,8 +98,14 @@ public sealed class TerminalFindViewModel : ObservableObject
     void Step(bool next)
     {
         if (control is not { } c || !open || text.Length == 0) return;
-        // Includes output that arrived since the last step, and steps on from the same match.
-        if (c.RefreshSearch() == 0) c.FindInBuffer(text, Options);
+        // Includes output that arrived since the last step, and steps on from the same match. Only then: a long
+        // scrollback takes a while to read again.
+        if (scanned != c.ContentStamp || c.SearchMatchCount == 0)
+        {
+            Scans++;
+            if (c.RefreshSearch() == 0) c.FindInBuffer(text, Options);
+            scanned = c.ContentStamp;
+        }
         if (next) c.FindNext(); else c.FindPrevious();
         Describe(c);
     }

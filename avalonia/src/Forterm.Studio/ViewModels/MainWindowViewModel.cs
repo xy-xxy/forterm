@@ -41,6 +41,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         OpenSettingsCommand = new RelayCommand(p => OpenSettings(p as string ?? "theme"));
         Palette = new PaletteViewModel(PaletteEntries);
         OpenPaletteCommand = new RelayCommand(Palette.Open);
+        // "锁屏": the password is checked against what is kept with the other secrets.
+        AppLock.Use(credentials);
+        LockCommand = new AsyncCommand(async () => { if (await AppLock.LockAsync() is { } why) Notice = why; }, e => Notice = "没有锁定：" + WorkspaceViewModel.Short(e.Message));
         // "空闲保活": minutes matter, so a look every few seconds is enough.
         idle = new Avalonia.Threading.DispatcherTimer(TimeSpan.FromSeconds(5), Avalonia.Threading.DispatcherPriority.Background, (_, _) => IdleTick());
         idle.Start();
@@ -56,6 +59,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ControllerAccess Access { get; init; } = new();
     public PaletteViewModel Palette { get; }
     public ICommand OpenPaletteCommand { get; }
+    /// <summary>"锁屏" now.</summary>
+    public ICommand LockCommand { get; }
 
     /// <summary>What the command palette offers right now. An entry only acts on the session that is shown.</summary>
     IEnumerable<PaletteEntry> PaletteEntries()
@@ -102,9 +107,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (current.CanShowMonitor) yield return Do("界面", current.ShowMonitor ? "收起监控栏" : "显示监控栏", current.ToggleMonitorCommand);
         }
         yield return Do("界面", "连接库", ShowHomeCommand, Shortcuts.Home.Keys);
+        yield return Do("界面", "锁定 Forterm", LockCommand, Shortcuts.Lock.Keys, detail: "会话保持；输入锁屏密码解锁");
         yield return Do("终端", "新建本地终端", OpenLocalTerminalCommand);
         yield return new PaletteEntry("设置", "系统配置", "主题界面", Shortcuts.Settings.Keys, () => OpenSettings("theme"));
-        foreach (var (key, title) in new[] { ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("keys", "快捷键"), ("local", "本地终端") })
+        foreach (var (key, title) in new[] { ("terminal", "通用终端"), ("highlight", "自定义高亮"), ("quick", "快速命令"), ("keys", "快捷键"), ("local", "本地终端"), ("lock", "锁屏") })
             yield return new PaletteEntry("设置", "系统配置：" + title, "", "", () => OpenSettings(key));
         foreach (var profile in library.Profiles)
             yield return new PaletteEntry("连接", profile.Name, $"{profile.User}@{profile.Host}:{profile.Port}", "", () => _ = OpenFromPaletteAsync(profile));
@@ -201,6 +207,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (value is WorkspaceViewModel shown && !Workspaces.Contains(shown)) return; // closed meanwhile
             // Its files are shown in another session, and nothing else of it has a place.
             if (value is WorkspaceViewModel { IsTabShown: false, Viewer: { } viewer }) value = viewer;
+            // Its terminal may be being laid out unseen ("标签渲染"): it is shown here now.
+            if (value is WorkspaceViewModel next) TerminalWarmUp.Release(next.ActiveContent as Avalonia.Controls.Control);
             if (!Set(ref selected, value)) return;
             Palette.Dismiss();
             foreach (var workspace in Workspaces) workspace.IsActive = ReferenceEquals(workspace, value);
