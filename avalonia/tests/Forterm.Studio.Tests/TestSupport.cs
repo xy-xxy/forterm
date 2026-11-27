@@ -253,3 +253,21 @@ internal sealed class StudioHarness : IDisposable
         try { Directory.Delete(Data, true); } catch (IOException) { }
     }
 }
+
+/// <summary>What an open menu shows: the entries its presenter drew, not what its Items hold (Avalonia 12 showed nothing
+/// that was added to Items while a menu opened, and only the Items were checked).</summary>
+internal static class Menus
+{
+    public static Avalonia.Controls.Control? Presenter(Avalonia.Controls.Primitives.FlyoutBase menu)
+    {
+        for (var t = menu.GetType(); t != null; t = t.BaseType)
+            foreach (var p in t.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
+                if (p.PropertyType == typeof(Avalonia.Controls.Primitives.Popup)) return ((Avalonia.Controls.Primitives.Popup?)p.GetValue(menu))?.Child as Avalonia.Controls.Control;
+        return null;
+    }
+
+    public static IReadOnlyList<Avalonia.Controls.MenuItem> Shown(Avalonia.Controls.Primitives.FlyoutBase menu) =>
+        Presenter(menu) is { } presenter ? Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(presenter).OfType<Avalonia.Controls.MenuItem>().ToList() : [];
+
+    public static string Text(Avalonia.Controls.MenuItem item) => item.Header is Avalonia.Controls.TextBlock t ? t.Text ?? "" : item.Header?.ToString() ?? "";
+}

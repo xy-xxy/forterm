@@ -200,6 +200,8 @@ public sealed partial class WorkspaceView : UserControl
         };
         // The order of the list and what it shows; the same as in the settings.
         if (this.FindControl<Button>("FileViewButton")!.Flyout is MenuFlyout view)
+        {
+            var entries = FilledAsItOpens(view);
             view.Opening += (_, _) =>
             {
                 var p = Appearance.Current;
@@ -209,14 +211,15 @@ public sealed partial class WorkspaceView : UserControl
                     Icon = new StrokeIcon { Data = Application.Current!.TryGetResource("Icon.Check", null, out object? icon) ? icon as Avalonia.Media.Geometry : null, Width = 12, Height = 12, IsVisible = on },
                     Command = new RelayCommand(() => model?.SavePreferences?.Invoke(change)),
                 };
-                view.Items.Clear();
-                foreach (var (key, title) in Appearance.FileSorts) view.Items.Add(Item("按" + title, p.FileSort == key, x => x with { FileSort = key }));
-                view.Items.Add(new Separator());
-                view.Items.Add(Item("从大到小、从新到旧", p.FileSortDescending, x => x with { FileSortDescending = !x.FileSortDescending }));
-                view.Items.Add(new Separator());
-                view.Items.Add(Item("显示隐藏文件", p.ShowHidden, x => x with { ShowHidden = !x.ShowHidden }));
-                view.Items.Add(Item("显示大小和时间", p.FileDetails, x => x with { FileDetails = !x.FileDetails }));
+                entries.Clear();
+                foreach (var (key, title) in Appearance.FileSorts) entries.Add(Item("按" + title, p.FileSort == key, x => x with { FileSort = key }));
+                entries.Add(new Separator());
+                entries.Add(Item("从大到小、从新到旧", p.FileSortDescending, x => x with { FileSortDescending = !x.FileSortDescending }));
+                entries.Add(new Separator());
+                entries.Add(Item("显示隐藏文件", p.ShowHidden, x => x with { ShowHidden = !x.ShowHidden }));
+                entries.Add(Item("显示大小和时间", p.FileDetails, x => x with { FileDetails = !x.FileDetails }));
             };
+        }
         var hint = this.FindControl<Border>("DropHint")!;
         var name = this.FindControl<TextBlock>("DropTarget")!;
         DragDrop.SetAllowDrop(files, true);
@@ -338,15 +341,27 @@ public sealed partial class WorkspaceView : UserControl
 
     MenuFlyout? linkFlyout;
 
+    /// <summary>What a menu shows, filled each time it opens. Avalonia 12 does not show what is added to a MenuFlyout's
+    /// own Items while it opens: the menu opened empty, two pixels wide, which on Windows is no menu at all ("关联文件会话"
+    /// and "排序和显示" did nothing, alpha.14). A list given as its ItemsSource before it first opens is followed.</summary>
+    internal static System.Collections.ObjectModel.ObservableCollection<object> FilledAsItOpens(MenuFlyout menu)
+    {
+        var entries = new System.Collections.ObjectModel.ObservableCollection<object>();
+        menu.ItemsSource = entries;
+        return entries;
+    }
+
     /// <summary>The file sessions that are open, to choose from.</summary>
     void WireLinks()
     {
         foreach (string name in new[] { "LinkButton", "OfferLink" })
             if (this.FindControl<Button>(name)!.Flyout is MenuFlyout menu)
+            {
+                var entries = FilledAsItOpens(menu);
                 menu.Opening += (_, _) =>
                 {
                     linkFlyout = menu;
-                    menu.Items.Clear();
+                    entries.Clear();
                     if (model is not { } desk) return;
                     var choices = desk.LinkChoices;
                     foreach (var source in choices)
@@ -359,15 +374,16 @@ public sealed partial class WorkspaceView : UserControl
                         };
                         // What a screen reader (and the Windows check) reads: the header is a text block, not text.
                         Avalonia.Automation.AutomationProperties.SetName(item, desk.LinkLabel(source));
-                        menu.Items.Add(item);
+                        entries.Add(item);
                     }
-                    if (choices.Count == 0) menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "没有打开的文件会话。请先从控制器用 xftp 打开，或在连接库打开 SFTP / FTP 连接。", MaxWidth = 320, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
+                    if (choices.Count == 0) entries.Add(new MenuItem { Header = new TextBlock { Text = "没有打开的文件会话。请先从控制器用 xftp 打开，或在连接库打开 SFTP / FTP 连接。", MaxWidth = 320, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
                     if (!desk.ShowsLinkedFiles) return;
-                    menu.Items.Add(new Separator());
+                    entries.Add(new Separator());
                     var unlink = new MenuItem { Header = new TextBlock { Text = "解除关联，恢复为单独的页签" }, Command = new RelayCommand(desk.Unlink) };
                     Avalonia.Automation.AutomationProperties.SetName(unlink, "解除关联，恢复为单独的页签");
-                    menu.Items.Add(unlink);
+                    entries.Add(unlink);
                 };
+            }
     }
 
     CenterTabViewModel? lastTab;

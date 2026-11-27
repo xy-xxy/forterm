@@ -6,7 +6,7 @@ namespace Forterm.Studio;
 /// other's controller launches.</summary>
 public static class StudioPaths
 {
-    public const string Version = "0.4.0-alpha.14";
+    public const string Version = "0.4.0-alpha.15";
     public static string DataDirectory =>
         Environment.GetEnvironmentVariable("FORTERM_STUDIO_DATA") is { Length: > 0 } custom
             ? custom

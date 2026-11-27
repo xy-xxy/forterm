@@ -340,18 +340,19 @@ public sealed class LinkTests
             var offer = Named("OfferLink");
             Assert.True(offer.IsEffectivelyVisible);
             void Press(Control c) { var at = c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), window)!.Value; window.MouseMove(at); window.MouseDown(at, MouseButton.Left); window.MouseUp(at, MouseButton.Left); Settle(window); }
-            static string Text(MenuItem item) => ((TextBlock)item.Header!).Text!;
             Press(offer);
             var menu = (MenuFlyout)offer.Flyout!;
-            Assert.Contains("没有打开的文件会话", Text((MenuItem)Assert.Single(menu.Items)!));
+            // What the open menu draws, not only what it holds.
+            Assert.Contains("没有打开的文件会话", Menus.Text(Assert.Single(Menus.Shown(menu))));
             menu.Hide();
             var files = await s.Xftp();
             s.Model.Selected = terminal;
             Settle(window);
             window.CaptureRenderedFrame()!.Save(Path.Combine(Paths.Evidence, "link-offer.png"));
             Press(offer);
-            var item = (MenuItem)Assert.Single(menu.Items)!;
-            Assert.StartsWith("文件会话", Text(item));
+            var item = Assert.Single(Menus.Shown(menu));
+            Assert.StartsWith("文件会话", Menus.Text(item));
+            Assert.True(Menus.Presenter(menu)!.Bounds.Width > 100, "the menu is drawn");
             item.Command!.Execute(null);
             menu.Hide();
             Settle(window);
@@ -394,9 +395,9 @@ public sealed class LinkTests
             window.CaptureRenderedFrame()!.Save(Path.Combine(Paths.Evidence, "link-lost.png"));
             var link = Named("LinkButton");
             Press(link);
-            var entries = ((MenuFlyout)link.Flyout!).Items;
-            Assert.Contains("解除关联", Text((MenuItem)entries[^1]!));
-            ((MenuItem)entries[^1]!).Command!.Execute(null);
+            var entries = Menus.Shown((MenuFlyout)link.Flyout!);
+            Assert.Contains("解除关联", Menus.Text(entries[^1]));
+            entries[^1].Command!.Execute(null);
             ((MenuFlyout)link.Flyout!).Hide();
             Settle(window);
             Assert.Same(terminal, terminal.FileView);

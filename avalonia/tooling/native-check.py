@@ -165,6 +165,16 @@ try:
         check('a menu button opens its menu with the mouse ("快速命令")', changed('快速命令') > 150, answer)
         check('"排序和显示" opens its menu', changed('排序和显示') > 150, answer)
         check('the chain icon of the file column opens the list of file sessions', changed('关联文件会话') > 150, answer)
+        # And choosing a file session there shows its files: the menu offers "解除关联" afterwards.
+        menu = ("$root=[System.Windows.Automation.AutomationElement]::RootElement; "
+                "function Items { foreach($top in @($root.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id)))){ $top.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::MenuItem)) } } ")
+        answer = ui(menu + "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 600; $listed=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
+                    "$item=@(Items) | Where-Object { $_.Current.Name -like '合成文件*' } | Select-Object -First 1; if($item){ ClickOn $item }; Start-Sleep -Milliseconds 800; "
+                    "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 600; $relisted=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
+                    "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); $listed + ' || ' + $relisted"); shot('linked')
+        listed, _, relisted = answer.partition(' || ')
+        check('its list names the open file session', '合成文件' in listed, answer)
+        check('and choosing it shows its files there', '解除关联' in relisted, answer)
     check('still running', first.poll() is None and len(programs()) == 1)
 finally:
     end_all()
