@@ -147,9 +147,10 @@ try:
         # "关联文件会话" with the real mouse: the chain icon of the file column lists the open file sessions (its menu is a
         # window of its own here), and choosing one shows its files there: its tab, a file session's only, goes away.
         menu = ("$root=[System.Windows.Automation.AutomationElement]::RootElement; "
-                "function Items { foreach($t in $root.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id))){ $t.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::MenuItem)) } } ")
+                "function Items { foreach($top in $root.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id))){ $top.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::MenuItem)) } } ")
+        # PowerShell's names ignore case: $t would be $T (the tree scope) above.
         answer = ui(menu + "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 500; $first=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
-                    "$i=@(Items) | Where-Object { $_.Current.Name -like '合成文件*' } | Select-Object -First 1; if($i){ ClickOn $i }; Start-Sleep -Milliseconds 800; "
+                    "$item=@(Items) | Where-Object { $_.Current.Name -like '合成文件*' } | Select-Object -First 1; if($item){ ClickOn $item }; Start-Sleep -Milliseconds 800; "
                     "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 500; $second=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
                     "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); $first + ' || ' + $second")
         listed, _, relisted = answer.partition(' || ')
