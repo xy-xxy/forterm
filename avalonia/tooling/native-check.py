@@ -149,14 +149,15 @@ try:
         shells = sum(f.ask('stats')['shells'] for f in servers)
         answer = ui("ClickOn (Find $main '新建终端'); Start-Sleep -Milliseconds 1500; 'clicked'")
         check('a button in a column header works with the mouse ("新建终端")', until(lambda: sum(f.ask('stats')['shells'] for f in servers) == shells + 1, 15), answer)
-        # Buttons that open a menu: whether one opened is seen on the screen, as what changes below the button after the
-        # click, with the pointer moved away (no tool tip). "快速命令" and "排序和显示" are the same kind of button, to compare;
+        # Buttons that open a menu: whether one opened is seen on the screen, as what changes below the button (or above it,
+        # where a menu near the bottom of the window opens upwards) after the click, with the pointer moved away (no tool tip). "快速命令" and "排序和显示" are the same kind of button, to compare;
         # UI Automation may not see menus at all. PowerShell's names ignore case: $t would be $T (the tree scope).
         probe = ("Add-Type -AssemblyName System.Drawing; "
-                 "function Grab($r) { $i=New-Object System.Drawing.Bitmap 320,240; ([System.Drawing.Graphics]::FromImage($i)).CopyFromScreen([int]$r.X-20,[int]($r.Y+$r.Height+2),0,0,$i.Size); $i } "
+                 "function Grab($r,$up) { $i=New-Object System.Drawing.Bitmap 320,240; $y=$(if($up){ [int]$r.Y-242 } else { [int]($r.Y+$r.Height+2) }); ([System.Drawing.Graphics]::FromImage($i)).CopyFromScreen([int]$r.X-20,$y,0,0,$i.Size); $i } "
                  "function Differ($a,$b) { $n=0; for($x=0;$x -lt 320;$x+=4){ for($y=0;$y -lt 240;$y+=4){ if($a.GetPixel($x,$y).ToArgb() -ne $b.GetPixel($x,$y).ToArgb()){ $n++ } } }; $n } "
                  "function Away { $w=$main.Current.BoundingRectangle; [void][Native]::SetCursorPos([int]($w.X+$w.Width-40),[int]($w.Y+$w.Height-40)); Start-Sleep -Milliseconds 300 } "
-                 "function Opens($name) { $b=Find $main $name; if(-not $b){ return $name + ':none' }; $r=$b.Current.BoundingRectangle; Away; Start-Sleep -Milliseconds 600; $before=Grab $r; ClickOn $b; Away; Start-Sleep -Milliseconds 900; $after=Grab $r; $n=Differ $before $after; "
+                 "function Opens($name) { $b=Find $main $name; if(-not $b){ return $name + ':none' }; $r=$b.Current.BoundingRectangle; Away; Start-Sleep -Milliseconds 600; $below=Grab $r $false; $above=Grab $r $true; ClickOn $b; Away; Start-Sleep -Milliseconds 900; "
+                 "$n=[Math]::Max((Differ $below (Grab $r $false)),(Differ $above (Grab $r $true))); "
                  "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); Start-Sleep -Milliseconds 500; $name + '=' + $n } ")
         answer = ui(probe + "@((Opens '快速命令'), (Opens '排序和显示'), (Opens '关联文件会话')) -join ' '"); shot('menus')
         print('points changed below each button after a click (of 4800):', answer, flush=True)
