@@ -420,13 +420,16 @@
             </StackPanel>
           </Border>
           <!-- a paste the server has not taken yet -->
-          <Border Name="PasteBar" Classes="reveal" IsVisible="{Binding IsPasteSlow}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Padding="12,6,6,6" CornerRadius="6"
+          <Border Name="PasteBar" Classes="reveal" IsVisible="{Binding IsPasteBarShown}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Padding="12,6,6,6" CornerRadius="6"
                   Background="{DynamicResource St.Menu}" BorderBrush="{DynamicResource St.Line}" BorderThickness="1">
             <StackPanel Orientation="Horizontal" Spacing="10">
-              <c:BusyRing Width="14" Height="14" Brush="{DynamicResource St.Accent}" IsActive="{Binding IsPasteSlow}" VerticalAlignment="Center"/>
-              <TextBlock Text="正在粘贴：服务器还没有收完" FontSize="12" VerticalAlignment="Center"/>
-              <Button Classes="secondary" Content="停止粘贴" Command="{Binding CancelPasteCommand}" Padding="10,3" MinHeight="0" FontSize="12"
-                      ToolTip.Tip="其余的不再发送；已经发出的部分留在终端里" AutomationProperties.Name="停止粘贴"/>
+              <c:BusyRing Width="14" Height="14" Brush="{DynamicResource St.Accent}" IsActive="{Binding IsPasteBarShown}" VerticalAlignment="Center"/>
+              <TextBlock Name="PasteSlowText" Text="正在粘贴：服务器还没有收完" FontSize="12" VerticalAlignment="Center" IsVisible="{Binding IsPasteSlow}"/>
+              <Button Classes="secondary" Content="停止粘贴" Command="{Binding CancelPasteCommand}" Padding="10,3" MinHeight="0" FontSize="12" IsVisible="{Binding IsPasteSlow}"
+                      ToolTip.Tip="还没开始发的不再发送；已经发出的部分留在终端里" AutomationProperties.Name="停止粘贴"/>
+              <!-- A piece that has begun goes out whole (never half a character), and an opened bracket is closed: both need
+                   the server to take them. -->
+              <TextBlock Name="PasteStoppingText" Text="{Binding PasteStoppingText}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="{Binding IsPasteStopping}"/>
             </StackPanel>
           </Border>
           <Border Background="{DynamicResource St.Terminal}" IsVisible="{Binding ShowTerminalOverlay}">

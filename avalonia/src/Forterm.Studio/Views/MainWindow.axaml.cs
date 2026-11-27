@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -103,7 +104,7 @@ public sealed partial class MainWindow : Window
         Appearance.Changed += Scale;
         Closed += (_, _) => Appearance.Changed -= Scale;
 
-        // "自定义背景图片" and "全局不透明度".
+        // "自定义背景图片", "全局透明度" and "全局不透明度".
         var backdrop = this.FindControl<Image>("BackdropImage")!;
         var solid = TransparencyLevelHint;
         void Look(StudioPreferences p)
@@ -111,13 +112,27 @@ public sealed partial class MainWindow : Window
             var image = Backdrop.Load(StudioPaths.DataDirectory, p);
             if (!ReferenceEquals(backdrop.Source, image)) backdrop.Source = image;
             backdrop.IsVisible = image != null;
-            bool clear = p.WindowOpacity < 1;
-            TransparencyLevelHint = clear ? [WindowTransparencyLevel.Transparent] : solid;
+            // This window's surfaces only: the settings window and dialogs keep the solid ones.
+            var through = Appearance.SeeThroughBrushes(p);
+            foreach (string key in Appearance.Surfaces)
+            {
+                if (!through.TryGetValue(key, out var brush)) Resources.Remove(key);
+                else if (!(Resources.TryGetValue(key, out object? had) && had is ISolidColorBrush old && old.Color == brush.Color && old.Opacity == brush.Opacity))
+                    Resources[key] = brush;
+            }
+            bool clear = Appearance.IsClear(p);
+            TransparencyLevelHint = clear && p.ClearWindowBlur ? [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Blur, WindowTransparencyLevel.Transparent]
+                : clear || p.WindowOpacity < 1 ? [WindowTransparencyLevel.Transparent] : solid;
+            // Where the system cannot show what is behind, the window looks as it does without.
+            if (Appearance.Solid("St.Window") is { } window) TransparencyBackgroundFallback = window;
             Opacity = p.WindowOpacity;
         }
         Look(Appearance.Current);
         Appearance.Changed += Look;
-        Closed += (_, _) => Appearance.Changed -= Look;
+        // Light and dark switched by the system: the see-through colours follow.
+        void Variant(object? sender, EventArgs e) => Look(Appearance.Current);
+        ActualThemeVariantChanged += Variant;
+        Closed += (_, _) => { Appearance.Changed -= Look; ActualThemeVariantChanged -= Variant; };
 
         // Terminals that start before they are shown are laid out here.
         var warm = this.FindControl<Canvas>("WarmUpHost")!;
@@ -133,7 +148,7 @@ public sealed partial class MainWindow : Window
             else Close();
         }
         AppLock.QuitRequested += Quit;
-        Closed += (_, _) => AppLock.QuitRequested -= Quit;
+        Closed += (_, _) => { AppLock.QuitRequested -= Quit; lockLayer.End(closing: true); };
         // Locked: the lock screen first (it remembers what had the keyboard), then everything else is hidden; unlocked, the
         // other way round.
         var content = this.FindControl<Grid>("ContentLayer")!;

@@ -175,42 +175,50 @@ public sealed class IdleWatch : IPtyConnection
         finally { one.Release(); }
     }
 
-    /// <summary>How much of a paste goes out at a time: cancelling stops between pieces, and inside one when the
-    /// server does not take it.</summary>
-    internal const int PastePiece = 4096;
+    /// <summary>How much of a paste goes out at a time, in UTF-8 bytes: a piece that has begun is sent whole, so a stop
+    /// takes effect between pieces — never inside a character, in whatever encoding the server speaks.</summary>
+    internal const int PastePiece = 1024;
+
+    /// <summary>The number of characters from <paramref name="at"/> that make the next piece: whole characters (a pair
+    /// of surrogates is one), at most <see cref="PastePiece"/> bytes of UTF-8, and at least one character.</summary>
+    internal static int PieceLength(string text, int at)
+    {
+        int i = at, bytes = 0;
+        while (i < text.Length)
+        {
+            char c = text[i];
+            bool pair = char.IsHighSurrogate(c) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]);
+            int size = pair ? 4 : c < 0x80 ? 1 : c < 0x800 ? 2 : 3; // a lone surrogate goes out as U+FFFD, 3 bytes
+            if (i > at && bytes + size > PastePiece) break;
+            bytes += size;
+            i += pair ? 2 : 1;
+        }
+        return i - at;
+    }
 
     /// <summary>A paste: <paramref name="head"/> (the keys that delete a keyboard selection it replaces), then the text,
     /// bracketed when the program asked for it — in one piece, with nothing of anybody else's in between. Cancelling stops
-    /// what has not gone out yet; a bracket that was opened is closed all the same, or the shell would take whatever is
-    /// typed next as part of the paste. False = cancelled.</summary>
+    /// what has not begun to go out; the piece that has begun is finished (when the server takes it), and a bracket that
+    /// was opened is closed all the same, or the shell would take whatever is typed next as part of the paste.
+    /// False = stopped before the end of the text.</summary>
     public async Task<bool> SendPasteAsync(string head, string text, bool bracketed, CancellationToken cancel, CancellationToken lifetime)
     {
         await one.WaitAsync(cancel).ConfigureAwait(false);
-        bool opened = false;
         try
         {
-            try
+            // Whole or not at all: half of the opening sequence would be left for the next key to complete.
+            await PieceAsync(head + (bracketed ? "\u001b[200~" : ""), lifetime).ConfigureAwait(false);
+            bool stopped = false;
+            for (int at = 0; at < text.Length;)
             {
-                // Whole or not at all: half of the opening sequence would be left for the next key to complete.
-                await PieceAsync(head + (bracketed ? "\u001b[200~" : ""), lifetime).ConfigureAwait(false);
-                opened = bracketed;
-                for (int at = 0; at < text.Length;)
-                {
-                    int length = Math.Min(PastePiece, text.Length - at);
-                    // Never half of a pair: each piece is whole UTF-8.
-                    if (at + length < text.Length && char.IsHighSurrogate(text[at + length - 1])) length--;
-                    await PieceAsync(text.Substring(at, length), cancel).ConfigureAwait(false);
-                    at += length;
-                }
-                opened = false;
-                if (bracketed) await PieceAsync("\u001b[201~", lifetime).ConfigureAwait(false);
-                return true;
+                if (cancel.IsCancellationRequested) { stopped = true; break; }
+                int length = PieceLength(text, at);
+                // Not cancelled half way: what the server took of it would end inside a character.
+                await PieceAsync(text.Substring(at, length), lifetime).ConfigureAwait(false);
+                at += length;
             }
-            catch (OperationCanceledException) when (cancel.IsCancellationRequested && !lifetime.IsCancellationRequested)
-            {
-                if (opened) await PieceAsync("\u001b[201~", lifetime).ConfigureAwait(false);
-                return false;
-            }
+            if (bracketed) await PieceAsync("\u001b[201~", lifetime).ConfigureAwait(false);
+            return !stopped;
         }
         finally
         {

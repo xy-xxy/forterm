@@ -84,6 +84,12 @@ jobs:
         run: |
           tooling/fixture-venv/Scripts/python tooling/native-check.py --app artifacts/studio-ci-win-x64 --out ../test-results/studio/native-looks --looks
           if ($LASTEXITCODE -ne 0) { throw "native check with the looks failed" }
+      - name: The same with a clear window (全局透明度) and the tabs below
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          tooling/fixture-venv/Scripts/python tooling/native-check.py --app artifacts/studio-ci-win-x64 --out ../test-results/studio/native-clear --clear
+          if ($LASTEXITCODE -ne 0) { throw "native check with a clear window failed" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -56,6 +56,10 @@ public interface IStudioInteraction
     /// <summary>Shows clipboard text before it goes into a terminal; true = paste it.</summary>
     Task<bool> ReviewPasteAsync(PasteReview review);
 
+    /// <summary>Something with a × has just gone away in this window, and the next × has taken its place (see
+    /// <see cref="CloseGuard"/>): that window's × do not react for a moment.</summary>
+    void Moved();
+
     /// <summary>New/edit tunnel; null when cancelled.</summary>
     Task<Library.TunnelDefinition?> EditTunnelAsync(Library.TunnelDefinition? existing, IReadOnlyList<Library.StudioProfile> sshProfiles);
 }

@@ -1007,7 +1007,9 @@ namespace Renci.SshNet
                     waitHandle
                 };
 
-            var signaledElement = WaitHandle.WaitAny(waitHandles, timeout);
+            var signaledElement = ConnectionInfo.Answering is { } answering && timeout != Timeout.InfiniteTimeSpan
+                ? WaitAnyAnswering(waitHandles, timeout, answering)
+                : WaitHandle.WaitAny(waitHandles, timeout);
             switch (signaledElement)
             {
                 case 0:
@@ -1033,6 +1035,32 @@ namespace Renci.SshNet
                     break;
                 default:
                     throw new SshException($"Unexpected element '{signaledElement.ToString(CultureInfo.InvariantCulture)}' signaled.");
+            }
+        }
+
+        // Forterm: as WaitHandle.WaitAny, but the time in which the user is answering (ConnectionInfo.Answering) is not
+        // counted: it is looked at every 100 ms.
+        private static int WaitAnyAnswering(WaitHandle[] waitHandles, TimeSpan timeout, Func<bool> answering)
+        {
+            var left = timeout;
+            while (true)
+            {
+                var slice = left < TimeSpan.FromMilliseconds(100) ? left : TimeSpan.FromMilliseconds(100);
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var signaled = WaitHandle.WaitAny(waitHandles, slice);
+                if (signaled != WaitHandle.WaitTimeout)
+                {
+                    return signaled;
+                }
+
+                if (!answering())
+                {
+                    left -= System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                    if (left <= TimeSpan.Zero)
+                    {
+                        return WaitHandle.WaitTimeout;
+                    }
+                }
             }
         }
 

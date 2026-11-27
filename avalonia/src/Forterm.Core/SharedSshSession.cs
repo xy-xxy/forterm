@@ -21,7 +21,9 @@ public sealed partial class SharedSshSession : IDisposable
     {
         options ??= new SessionConnectOptions(); options.Validate();
         ct.ThrowIfCancellationRequested();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(45, options.ConnectTimeoutSeconds))); var authToken = timeout.Token;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); var window = TimeSpan.FromSeconds(Math.Max(AuthenticationFloorSeconds, options.ConnectTimeoutSeconds)); timeout.CancelAfter(window); var authToken = timeout.Token;
+        var answers = options.AnswersUntimed ? new AnswerClock(timeout, window) : null;
+        if (answers != null) { confirmFingerprint = answers.Wrap(confirmFingerprint); if (challenge != null) challenge = answers.Wrap(challenge); }
         using var authentication = await Task.Run(() => new SessionAuthentication(username, password, temporary, challenge, authToken, authMode, keyPath, keyPassphrase, options), CancellationToken.None).ConfigureAwait(false); authToken.ThrowIfCancellationRequested();
         IDisposable? jumpLease = null; JumpProxy? relay = null;
         if (options.Jump != null) { jumpLease = options.Jump.Retain(); try { relay = new JumpProxy(options.Jump.client, host, port); } catch { jumpLease.Dispose(); throw; } }
@@ -29,6 +31,7 @@ public sealed partial class SharedSshSession : IDisposable
             : options.Proxy is { } proxy ? new ConnectionInfo(host, port, username, proxy.Kind == ProxyKind.Http ? ProxyTypes.Http : ProxyTypes.Socks5, proxy.Host, proxy.Port, proxy.User, proxy.Password, authentication.Methods.ToArray())
             : new ConnectionInfo(host, port, username, authentication.Methods.ToArray());
         info.Timeout = TimeSpan.FromSeconds(options.ConnectTimeoutSeconds); info.MaxSessions = options.MaxChannels;
+        if (answers != null) info.Answering = () => answers.IsAnswering;
         SshAlgorithms.Apply(info, options);
         if (options.CommonChannels) { info.RetryAttempts = 1; info.ChannelPacketSize = 32 * 1024; }
         if (options.Trace != null) info.LoggerFactory = options.Trace;
@@ -44,6 +47,39 @@ public sealed partial class SharedSshSession : IDisposable
         try { try { await client.ConnectAsync(authToken).ConfigureAwait(false); } finally { options.Trace?.OnConnection(info); } return new(client, options, relay, jumpLease); }
         catch (Exception error) { client.Dispose(); relay?.Dispose(); jumpLease?.Dispose(); if (relay?.Failure != null) throw new IOException("跳板转发未成功；原跳板会话保持：" + relay.Failure, error); throw; }
         finally { timeout.Cancel(); }
+    }
+    /// <summary>The shortest overall authentication window (questions included, unless <see cref="SessionConnectOptions.AnswersUntimed"/>).</summary>
+    internal static int AuthenticationFloorSeconds = 45;
+    /// <summary>Stops the overall authentication window while the user answers a question.</summary>
+    internal sealed class AnswerClock(CancellationTokenSource timeout, TimeSpan window)
+    {
+        readonly object gate = new();
+        TimeSpan left = window; long since = System.Diagnostics.Stopwatch.GetTimestamp(); int open;
+        public bool IsAnswering => Volatile.Read(ref open) > 0;
+        void Begin()
+        {
+            lock (gate)
+            {
+                if (open++ > 0) return;
+                left -= System.Diagnostics.Stopwatch.GetElapsedTime(since);
+                try { timeout.CancelAfter(Timeout.InfiniteTimeSpan); } catch (ObjectDisposedException) { }
+            }
+        }
+        void End()
+        {
+            lock (gate)
+            {
+                if (--open > 0) return;
+                since = System.Diagnostics.Stopwatch.GetTimestamp();
+                try { timeout.CancelAfter(left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1)); } catch (ObjectDisposedException) { }
+            }
+        }
+        public Func<T, CancellationToken, Task<R>> Wrap<T, R>(Func<T, CancellationToken, Task<R>> ask) => async (question, token) =>
+        {
+            Begin();
+            try { return await ask(question, token).ConfigureAwait(false); }
+            finally { End(); }
+        };
     }
     SharedSshSession(SshClient client, SessionConnectOptions options, IDisposable? upstream = null, IDisposable? upstreamLease = null)
     {

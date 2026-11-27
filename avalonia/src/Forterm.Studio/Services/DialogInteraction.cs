@@ -11,11 +11,12 @@ namespace Forterm.Studio.Services;
 /// <summary>Shows Studio's dialogs and pickers on the UI thread over the owning window.</summary>
 public sealed class DialogInteraction(Func<Window?> owner) : IStudioInteraction
 {
+    // Counted: under the lock screen the user is told that a connection waits for an answer.
     public Task<string[]?> AskCredentialsAsync(CredentialChallenge challenge, CancellationToken ct) =>
-        Dispatcher.UIThread.InvokeAsync(() => CredentialDialog.AskAsync(owner(), challenge, "", ct));
+        Dispatcher.UIThread.InvokeAsync(() => AppLock.AskingAsync(() => CredentialDialog.AskAsync(owner(), challenge, "", ct)));
 
     public Task<bool> ConfirmHostKeyAsync(HostKeyQuestion question, CancellationToken ct) =>
-        Dispatcher.UIThread.InvokeAsync(() => HostKeyDialog.AskAsync(owner(), question, ct));
+        Dispatcher.UIThread.InvokeAsync(() => AppLock.AskingAsync(() => HostKeyDialog.AskAsync(owner(), question, ct)));
 
     public Task<bool> ConfirmAsync(string title, string message, string confirmText, bool danger) =>
         Dispatcher.UIThread.InvokeAsync(() => SimpleDialog.ConfirmAsync(owner(), title, message, confirmText, danger));
@@ -108,6 +109,9 @@ public sealed class DialogInteraction(Func<Window?> owner) : IStudioInteraction
 
     public Task<Library.TunnelDefinition?> EditTunnelAsync(Library.TunnelDefinition? existing, IReadOnlyList<Library.StudioProfile> sshProfiles) =>
         Dispatcher.UIThread.InvokeAsync(() => TunnelDialog.AskAsync(owner(), existing, sshProfiles));
+
+    /// <summary>The window this interaction belongs to: also when the user is in another one.</summary>
+    public void Moved() => CloseGuard.MovedIn(owner());
 
     public void Toast(ToastMessage message) => Dispatcher.UIThread.Post(() => (owner()?.DataContext as MainWindowViewModel)?.Toasts.Show(message));
 

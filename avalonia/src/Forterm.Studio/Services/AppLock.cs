@@ -77,6 +77,23 @@ public static class AppLock
     /// <summary>The user ends the program from the lock screen (the password is forgotten).</summary>
     public static event Action? QuitRequested;
 
+    static int questions;
+    /// <summary>Questions of connections that wait for the user now (host keys, login prompts). While locked they wait
+    /// under the lock screen, which says so; the time does not count against the connection (AnswersUntimed).</summary>
+    public static int Questions => questions;
+    /// <summary>On the UI thread.</summary>
+    public static event Action? QuestionsChanged;
+    internal static int QuestionsListeners => QuestionsChanged?.GetInvocationList().Length ?? 0;
+
+    /// <summary>A question of a connection is shown while <paramref name="ask"/> runs. On the UI thread.</summary>
+    public static async Task<T> AskingAsync<T>(Func<Task<T>> ask)
+    {
+        questions++;
+        QuestionsChanged?.Invoke();
+        try { return await ask(); }
+        finally { questions--; QuestionsChanged?.Invoke(); }
+    }
+
     /// <summary>Where the check is kept. The latest store is the one (there is one per program).</summary>
     public static void Use(CredentialStore credentials)
     {
@@ -340,7 +357,12 @@ public sealed class LockCover : Border
         DragDrop.SetAllowDrop(this, false);
         Fit();
         window.PropertyChanged += OnWindowChanged;
+        window.Closed += OnClosed;
     }
+
+    /// <summary>A window that closes while locked (a question given up) lets go of its lock screen, which would otherwise
+    /// stay subscribed to <see cref="AppLock.QuestionsChanged"/> for the rest of the program.</summary>
+    void OnClosed(object? sender, EventArgs e) => End(closing: true);
 
     void OnWindowChanged(object? sender, AvaloniaPropertyChangedEventArgs e) { if (e.Property == TopLevel.ClientSizeProperty) Fit(); }
 
@@ -352,11 +374,12 @@ public sealed class LockCover : Border
         if (window.Content is Control { IsVisible: true } content) { content.SetCurrentValue(IsVisibleProperty, false); hid = true; }
     }
 
-    internal void End()
+    internal void End(bool closing = false)
     {
         window.PropertyChanged -= OnWindowChanged;
+        window.Closed -= OnClosed;
         if (hid && window.Content is Control content) content.SetCurrentValue(IsVisibleProperty, true);
         hid = false;
-        screen.End();
+        screen.End(closing);
     }
 }

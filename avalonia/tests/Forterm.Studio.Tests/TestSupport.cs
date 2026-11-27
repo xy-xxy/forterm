@@ -160,6 +160,10 @@ internal sealed class ScriptedInteraction(params string[][] answers) : IStudioIn
     public Task CopyTextAsync(string text) { Clipboard = text; return Task.CompletedTask; }
     public List<ToastMessage> Toasts { get; } = new();
     public void Toast(ToastMessage message) => Toasts.Add(message);
+    /// <summary>The window it stands for; null: the one the user last acted in, as before windows were told apart.</summary>
+    public Avalonia.Controls.TopLevel? Window { get; set; }
+    public int MovedCount { get; private set; }
+    public void Moved() { MovedCount++; CloseGuard.MovedIn(Window); }
     public List<string> OpenedFolders { get; } = new();
     public Task OpenFolderAsync(string path) { OpenedFolders.Add(path); return Task.CompletedTask; }
     public ProcessListViewModel? Processes { get; private set; }

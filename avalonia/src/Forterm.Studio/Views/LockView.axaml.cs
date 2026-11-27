@@ -16,6 +16,8 @@ public sealed partial class LockView : UserControl
     readonly TextBlock problem;
     readonly Button quit;
     readonly StackPanel forgot;
+    readonly Border waiting;
+    readonly TextBlock waitingText;
     IInputElement? before;
     bool trying, quitAsked;
     long quitAskedAt;
@@ -27,6 +29,8 @@ public sealed partial class LockView : UserControl
         problem = this.FindControl<TextBlock>("ProblemText")!;
         quit = this.FindControl<Button>("QuitButton")!;
         forgot = this.FindControl<StackPanel>("ForgotPanel")!;
+        waiting = this.FindControl<Border>("WaitingNote")!;
+        waitingText = this.FindControl<TextBlock>("WaitingText")!;
         this.FindControl<Button>("UnlockButton")!.Click += (_, _) => _ = UnlockAsync();
         this.FindControl<Button>("ForgotButton")!.Click += (_, _) => forgot.IsVisible = !forgot.IsVisible;
         quit.Click += (_, _) =>
@@ -53,16 +57,20 @@ public sealed partial class LockView : UserControl
         quitAsked = false;
         quit.Content = "退出 Forterm";
         IsVisible = true;
+        AppLock.QuestionsChanged += ShowWaiting;
+        ShowWaiting();
         window = TopLevel.GetTopLevel(this) as Window;
         if (window != null) window.Activated += OnActivated;
         Dispatcher.UIThread.Post(() => { if (AppLock.IsLocked && TakesKeys()) password.Focus(); }, DispatcherPriority.Input);
     }
 
-    /// <summary>Unlocked: hidden, and the keyboard goes back where it was, in the window that is in front.</summary>
-    public void End()
+    /// <summary>Unlocked: hidden, and the keyboard goes back where it was, in the window that is in front. Also when its
+    /// window closes (<paramref name="closing"/>: the keyboard stays where it is).</summary>
+    public void End(bool closing = false)
     {
         if (window != null) window.Activated -= OnActivated;
-        bool keys = TakesKeys();
+        AppLock.QuestionsChanged -= ShowWaiting;
+        bool keys = !closing && TakesKeys();
         window = null;
         IsVisible = false;
         password.Text = "";
@@ -75,6 +83,19 @@ public sealed partial class LockView : UserControl
 
     /// <summary>The user went to this window while locked: the keys are for its password box.</summary>
     void OnActivated(object? sender, EventArgs e) { if (AppLock.IsLocked && IsVisible) password.Focus(); }
+
+    /// <summary>Connections that wait for an answer (they were opened while locked): said, so the user unlocks.</summary>
+    void ShowWaiting()
+    {
+        int n = AppLock.Questions;
+        waiting.IsVisible = n > 0;
+        waitingText.Text = n > 0 ? $"有 {n} 个问题在等你回答（主机指纹、登录或 sudo 密码），解锁后回答。连接登录时，等你回答的时间不算连接超时；服务器自己的登录时限，以及启动隧道（2 分钟）和 sudo 的时限仍然有效。" : "";
+    }
+
+    /// <summary>Subscribed to the questions now (for tests: a closed window must have let go).</summary>
+    internal static int Listening => AppLock.QuestionsListeners;
+
+    internal string WaitingSaid => waiting.IsVisible ? waitingText.Text ?? "" : "";
 
     void Say(string text) { problem.Text = text; problem.IsVisible = text.Length > 0; }
 

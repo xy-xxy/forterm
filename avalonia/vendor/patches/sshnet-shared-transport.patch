@@ -252,7 +252,7 @@
 +}
 --- upstream/ConnectionInfo.cs
 +++ forterm/ConnectionInfo.cs
-@@ -515,5 +515,9 @@
+@@ -515,5 +515,13 @@
          /// The logger factory for this connection. If <see langword="null"/> then <see cref="SshNetLoggingConfiguration.LoggerFactory"/> is used.
          /// </value>
          public ILoggerFactory? LoggerFactory { get; set; }
@@ -260,6 +260,10 @@
 +        // Forterm: the largest packet the server is told it may send on a channel; 0 is the library's own (64 KiB).
 +        // OpenSSH says 32 KiB, PuTTY 16 KiB.
 +        public uint ChannelPacketSize { get; set; }
++
++        // Forterm: while this says true, the user is answering a question of this connection (its host key, a login
++        // prompt): that time does not count towards Timeout. The server's own limit still applies.
++        public Func<bool>? Answering { get; set; }
      }
  }
 --- upstream/Messages/Authentication/BannerMessage.cs
@@ -319,20 +323,64 @@
  
          /// <summary>
          /// Holds the factory to use for creating new services.
-@@ -2225,6 +2225,12 @@
-         WaitHandle ISession.MessageListenerCompleted
-         {
-             get { return _messageListenerCompleted; }
+@@ -1007,7 +1007,9 @@
+                     waitHandle
+                 };
+ 
+-            var signaledElement = WaitHandle.WaitAny(waitHandles, timeout);
++            var signaledElement = ConnectionInfo.Answering is { } answering && timeout != Timeout.InfiniteTimeSpan
++                ? WaitAnyAnswering(waitHandles, timeout, answering)
++                : WaitHandle.WaitAny(waitHandles, timeout);
+             switch (signaledElement)
+             {
+                 case 0:
+@@ -1033,6 +1035,32 @@
+                     break;
+                 default:
+                     throw new SshException($"Unexpected element '{signaledElement.ToString(CultureInfo.InvariantCulture)}' signaled.");
++            }
 +        }
 +
++        // Forterm: as WaitHandle.WaitAny, but the time in which the user is answering (ConnectionInfo.Answering) is not
++        // counted: it is looked at every 100 ms.
++        private static int WaitAnyAnswering(WaitHandle[] waitHandles, TimeSpan timeout, Func<bool> answering)
++        {
++            var left = timeout;
++            while (true)
++            {
++                var slice = left < TimeSpan.FromMilliseconds(100) ? left : TimeSpan.FromMilliseconds(100);
++                var started = System.Diagnostics.Stopwatch.GetTimestamp();
++                var signaled = WaitHandle.WaitAny(waitHandles, slice);
++                if (signaled != WaitHandle.WaitTimeout)
++                {
++                    return signaled;
++                }
++
++                if (!answering())
++                {
++                    left -= System.Diagnostics.Stopwatch.GetElapsedTime(started);
++                    if (left <= TimeSpan.Zero)
++                    {
++                        return WaitHandle.WaitTimeout;
++                    }
++                }
+             }
+         }
+ 
+@@ -2227,6 +2255,12 @@
+             get { return _messageListenerCompleted; }
+         }
+ 
 +        // Forterm: see ConnectionInfo.ChannelPacketSize.
 +        private uint ChannelPacketSize
 +        {
 +            get { return ConnectionInfo.ChannelPacketSize > 0 ? ConnectionInfo.ChannelPacketSize : LocalChannelDataPacketSize; }
-         }
- 
++        }
++
          /// <summary>
-@@ -2235,7 +2241,7 @@
+         /// Create a new SSH session channel.
+         /// </summary>
+@@ -2235,7 +2269,7 @@
          /// </returns>
          IChannelSession ISession.CreateChannelSession()
          {
@@ -341,7 +389,7 @@
          }
  
          /// <summary>
-@@ -2246,7 +2252,7 @@
+@@ -2246,7 +2280,7 @@
          /// </returns>
          IChannelDirectTcpip ISession.CreateChannelDirectTcpip()
          {

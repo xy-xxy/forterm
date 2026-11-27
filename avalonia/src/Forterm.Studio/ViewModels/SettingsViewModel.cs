@@ -151,6 +151,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         new("motion", "theme", "界面动画", "界面动画 动画 动效 过渡 减少动态效果"),
         new("bgimage", "theme", "自定义背景图片", "背景 图片 壁纸 照片 自定义 透明"),
         new("opacity", "theme", "全局不透明度", "不透明度 透明 半透明 窗口"),
+        new("clear", "theme", "全局透明度（Beta）", "透明 透明度 毛玻璃 桌面 窗口 半透明 beta"),
         new("termfont", "terminal", "终端字体", "终端字体 等宽 字体"),
         new("termsize", "terminal", "终端字号", "终端字号 字号 字体大小"),
         new("scheme", "terminal", "终端配色", "终端配色 配色 颜色 主题"),
@@ -236,7 +237,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         ResetCommand = new RelayCommand(() => Commit(p0 =>
         {
             var d = new StudioPreferences();
-            return p0 with { Theme = d.Theme, FollowSystem = d.FollowSystem, Accent = d.Accent, UiScale = d.UiScale, TitleBarColor = d.TitleBarColor, UiFont = d.UiFont, Motion = d.Motion };
+            // Also what makes the window hard to read; the picture itself has its own "移除".
+            return p0 with { Theme = d.Theme, FollowSystem = d.FollowSystem, Accent = d.Accent, UiScale = d.UiScale, TitleBarColor = d.TitleBarColor, UiFont = d.UiFont, Motion = d.Motion,
+                WindowOpacity = d.WindowOpacity, ClearWindow = d.ClearWindow, ClearWindowBlur = d.ClearWindowBlur, BackgroundStrength = d.BackgroundStrength };
         }));
         IdleMinutesChoices = IdleKeeper.Minutes.Append(prefs.IdleMinutes).Distinct().Order().ToArray();
         IdleHoursChoices = IdleKeeper.Hours.Append(prefs.IdleHours).Distinct().Order().ToArray();
@@ -668,6 +671,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool HasBackgroundImage => prefs.BackgroundImage.Length > 0;
     public double BackgroundPercent { get => Math.Round(prefs.BackgroundStrength * 100); set => Commit(p0 => p0 with { BackgroundStrength = Math.Round(value) / 100 }); }
     public string BackgroundPercentText => $"{BackgroundPercent:0}%";
+    /// <summary>The "透出" slider of the clear card (the picture card has its own; one value for both).</summary>
+    public bool ClearShowsSlider => prefs.ClearWindow && prefs.BackgroundImage.Length == 0;
+    public bool ClearWindow { get => prefs.ClearWindow; set => Commit(p0 => p0 with { ClearWindow = value }); }
+    public bool ClearWindowBlur { get => prefs.ClearWindowBlur; set => Commit(p0 => p0 with { ClearWindowBlur = value }); }
+    /// <summary>Both on: the picture wins, and the card says so.</summary>
+    public bool ClearWithPicture => prefs.ClearWindow && prefs.BackgroundImage.Length > 0;
     public double OpacityPercent { get => Math.Round(prefs.WindowOpacity * 100); set => Commit(p0 => p0 with { WindowOpacity = Math.Round(value) / 100 }); }
     public string OpacityText => $"{OpacityPercent:0}%";
     public string BackgroundStatus { get => backgroundStatus; private set { if (Set(ref backgroundStatus, value)) Raise(nameof(HasBackgroundStatus)); } }
@@ -944,7 +953,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             nameof(IdleKeepAlive), nameof(IdleMinutes), nameof(IdleInput), nameof(IdleInputNote), nameof(IdleHours), nameof(IdleFullScreen),
             nameof(EditorFont), nameof(EditorFontSize), nameof(EditorWrap), nameof(EditorWhitespace), nameof(EditorLineNumbers), nameof(EditorColours), nameof(EditorSpaces), nameof(EditorTab), nameof(HasLanguages), nameof(LanguagesText),
             nameof(FileSort), nameof(FileSortDescending), nameof(ShowHiddenFiles), nameof(FileDetails), nameof(NotifyTransfers), nameof(HasDownloadFolder), nameof(DownloadFolderText),
-            nameof(HasBackgroundImage), nameof(BackgroundPercent), nameof(BackgroundPercentText), nameof(OpacityPercent), nameof(OpacityText), nameof(TabPosition), nameof(TabRender), nameof(LockChoice), nameof(LockAtStart), nameof(LockKeys),
+            nameof(HasBackgroundImage), nameof(BackgroundPercent), nameof(BackgroundPercentText), nameof(ClearShowsSlider), nameof(ClearWindow), nameof(ClearWindowBlur), nameof(ClearWithPicture), nameof(OpacityPercent), nameof(OpacityText), nameof(TabPosition), nameof(TabRender), nameof(LockChoice), nameof(LockAtStart), nameof(LockKeys),
             nameof(OpenFiles), nameof(OpenMonitor), nameof(DiskWarning), nameof(DiskDanger), nameof(CpuWarning), nameof(CpuDanger), nameof(MemoryWarning), nameof(MemoryDanger), nameof(LoadWarning), nameof(LoadDanger), nameof(LimitsText), nameof(LimitsChanged), nameof(KeysChanged),
         }) Raise(name);
         foreach (var k in Keys) k.Sync(k == capturing, k.Error);

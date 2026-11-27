@@ -13,6 +13,10 @@
       <TextBlock Text="Forterm 已锁定" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
       <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
                  Text="会话仍在运行（心跳、空闲保活和传输照常）。输入锁屏密码解锁。"/>
+      <!-- A connection opened while locked (a controller launch) asks something: it waits until unlocked. -->
+      <Border Name="WaitingNote" IsVisible="False" Padding="10,8" CornerRadius="6" Background="{DynamicResource St.AccentSoft}">
+        <TextBlock Name="WaitingText" FontSize="12" TextWrapping="Wrap"/>
+      </Border>
       <TextBox Name="PasswordBox" PasswordChar="●" PlaceholderText="锁屏密码" Padding="10,7" AutomationProperties.Name="锁屏密码"/>
       <TextBlock Name="ProblemText" FontSize="12" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" IsVisible="False"/>
       <Button Name="UnlockButton" Classes="primary" Content="解锁" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="解锁"/>

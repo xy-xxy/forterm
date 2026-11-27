@@ -24,6 +24,10 @@ public sealed record SessionConnectOptions
     /// request up to ten times at once; with packets of 32 KiB, where it says 64 KiB; and a terminal with a list of modes,
     /// where it sends an empty one.</summary>
     public bool CommonChannels { get; init; }
+    /// <summary>The time in which the user answers a question of the connection (its host key, a login prompt) does not
+    /// count towards the timeouts: neither the library's per-request one nor the overall authentication window. The
+    /// server's own limit for a login still applies. Off: as before, the answer must come within those limits.</summary>
+    public bool AnswersUntimed { get; init; }
     /// <summary>Notes which messages are exchanged with the server (see <see cref="SshTrace"/>).</summary>
     public SshTrace? Trace { get; init; }
     public void Validate()

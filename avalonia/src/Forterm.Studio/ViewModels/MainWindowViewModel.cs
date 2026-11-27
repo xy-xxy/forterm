@@ -322,7 +322,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (index < 0) return;
         workspace.EndLinks();
         Workspaces.RemoveAt(index);
-        CloseGuard.Moved();
+        interaction.Moved();
         Avalonia.Threading.Dispatcher.UIThread.Post(Home.RefreshInfo);
         if (ReferenceEquals(Selected, workspace))
             Selected = Workspaces.Skip(index).Concat(Workspaces.Take(index).Reverse()).FirstOrDefault(w => w.IsTabShown) ?? (object)Home;

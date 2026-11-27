@@ -47,7 +47,7 @@ public sealed partial class WorkspaceViewModel
         RunQuickCommand = new AsyncCommand<QuickCommand>(RunQuickAsync, e => Status = "快速命令没有发送：" + Short(e.Message));
         ManageQuickCommandsCommand = new RelayCommand(() => ShowSettings?.Invoke("quick"));
         TerminalSettingsCommand = new RelayCommand(() => ShowSettings?.Invoke("terminal"));
-        CancelPasteCommand = new RelayCommand(() => { if (ShownTerminal?.CancelPaste() == true) Status = "正在停止粘贴：其余的不再发送"; });
+        CancelPasteCommand = new RelayCommand(() => { if (ShownTerminal?.CancelPaste() == true) Status = "正在停止粘贴：还没开始发的不再发送"; });
         ToggleIdleCommand = new RelayCommand(() => { if (!CanIdle) return; idleChoice = !IsIdleOn; RaiseIdle(); });
         if (CanIdle) Appearance.Changed += OnIdlePreferences;
     }
@@ -62,14 +62,23 @@ public sealed partial class WorkspaceViewModel
     public string RecordHeader => IsRecording ? "停止记录会话" : "记录会话到文件…";
     /// <summary>A paste into the shown terminal has been going out for a while: it can be stopped.</summary>
     public bool IsPasteSlow => ShownTerminal?.IsPasteSlow == true;
+    /// <summary>The paste was stopped and what had begun to go out still waits for the server.</summary>
+    public bool IsPasteStopping => ShownTerminal?.IsPasteStopping == true;
+    public bool IsPasteBarShown => IsPasteSlow || IsPasteStopping;
+    /// <summary>What still waits after a stop: the piece that had begun, and the closing bracket when there is one.</summary>
+    public string PasteStoppingText => ShownTerminal?.IsPasteBracketed == true
+        ? "正在停止粘贴：正在发的一小段和结束标记等服务器收下，之后的不再发送"
+        : "正在停止粘贴：正在发的一小段等服务器收下，之后的不再发送";
 
     void OnActiveTabChanged()
     {
         Raise(nameof(IsTerminalShown));
         Raise(nameof(IsRecording));
-        Raise(nameof(IsPasteSlow));
+        RaisePasteBar();
         Find.Retarget();
     }
+
+    void RaisePasteBar() { Raise(nameof(IsPasteSlow)); Raise(nameof(IsPasteStopping)); Raise(nameof(IsPasteBarShown)); Raise(nameof(PasteStoppingText)); }
 
     /// <summary>The right-click menu is about to open: its state is read once, here.</summary>
     public void RefreshTerminalMenu()
@@ -156,7 +165,8 @@ public sealed partial class WorkspaceViewModel
             switch (await tab.PasteAsync(head, text, bracketed, lifetime.Token))
             {
                 case null when disposed == 0 && Terminals.Contains(tab): Status = "上一次粘贴还没有发送完，这次没有粘贴"; break;
-                case false when disposed == 0: Status = "已停止粘贴：已经发出的部分留在终端里，其余的没有发送"; break;
+                case TerminalTabViewModel.PasteOutcome.Stopped when disposed == 0: Status = "已停止粘贴：已经发出的部分留在终端里，其余的没有发送" + (bracketed ? "（已补上结束标记）" : ""); break;
+                case TerminalTabViewModel.PasteOutcome.WholeBeforeStop when disposed == 0: Status = "粘贴已全部发出：停止时已经在发最后一段"; break;
             }
         }
         catch (OperationCanceledException) when (!lifetime.IsCancellationRequested) { if (disposed == 0) Status = "已停止粘贴，什么都没有发送"; }

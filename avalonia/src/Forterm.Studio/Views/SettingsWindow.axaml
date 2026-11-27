@@ -202,6 +202,30 @@
               <TextBlock Grid.Column="2" Text="{Binding OpacityText}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </Grid>
           </Border>
+          <Border Classes="card" IsVisible="{Binding Shown[clear]}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="3" Margin="0,0,16,0">
+                  <TextBlock Classes="h" Text="全局透明度（Beta）"/>
+                  <TextBlock Classes="hint" Text="主窗口的底色变透明，各栏和终端后面能看到桌面和其他窗口，程度用下面的“透出”调节；文字、对话框和菜单不透明。不与背景图片一起生效：有背景图片时显示图片。系统不支持透明窗口时看不到后面的内容，各栏颜色会稍有变化。"/>
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding ClearWindow}" OnContent="已启用" OffContent="不启用" VerticalAlignment="Center" AutomationProperties.Name="全局透明度"/>
+              </Grid>
+              <Grid ColumnDefinitions="Auto,*,60" IsVisible="{Binding ClearShowsSlider}">
+                <TextBlock Text="透出" VerticalAlignment="Center" FontSize="12.5" Margin="0,0,16,0"/>
+                <Slider Grid.Column="1" Minimum="10" Maximum="90" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding BackgroundPercent}" VerticalAlignment="Center" AutomationProperties.Name="透出"/>
+                <TextBlock Grid.Column="2" Text="{Binding BackgroundPercentText}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ClearWindow}">
+                <StackPanel Spacing="3" Margin="0,0,16,0">
+                  <TextBlock Text="毛玻璃" FontSize="12.5"/>
+                  <TextBlock Classes="hint" Text="透出的部分模糊显示，文字更容易看清（Windows 10/11 和 macOS 支持时）。"/>
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding ClearWindowBlur}" OnContent="已启用" OffContent="不启用" VerticalAlignment="Center" AutomationProperties.Name="毛玻璃"/>
+              </Grid>
+              <TextBlock Classes="hint" Text="现在有背景图片：显示图片，看不到后面的桌面。移除图片后生效。" IsVisible="{Binding ClearWithPicture}" Foreground="{DynamicResource St.Warning}"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
 
         <!-- 编辑器 -->

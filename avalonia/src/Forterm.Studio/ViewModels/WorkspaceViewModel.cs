@@ -48,6 +48,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     readonly IStudioInteraction interaction;
     readonly KnownHosts knownHosts;
     readonly SessionConnectOptions options;
+    internal SessionConnectOptions ConnectOptions => options;
     readonly SessionSettings settings;
     /// <summary>What is said to the server while it connects and opens its channels (SSH only).</summary>
     readonly SshTrace? trace;
@@ -89,7 +90,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         this.interaction = interaction;
         this.knownHosts = knownHosts;
         if (kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp) trace = new SshTrace();
-        this.options = (options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels }) with { CommonChannels = true, Trace = trace };
+        this.options = (options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels }) with { CommonChannels = true, AnswersUntimed = true, Trace = trace };
         this.settings = settings ?? new SessionSettings();
         this.profile = profile;
         this.connector = connector;
@@ -111,15 +112,15 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         ToggleFilesCommand = new RelayCommand(() => ShowFiles = !ShowFiles, () => CanShowFiles);
         ToggleTerminalCommand = new RelayCommand(() => ShowTerminal = !ShowTerminal, () => CanShowTerminal);
         ToggleMonitorCommand = new RelayCommand(() => ShowMonitor = !ShowMonitor, () => CanShowMonitor);
-        HideFilesCommand = new RelayCommand(() => { ShowFiles = false; CloseGuard.Moved(); });
+        HideFilesCommand = new RelayCommand(() => { ShowFiles = false; interaction.Moved(); });
         HideTerminalCommand = new RelayCommand(() =>
         {
             ShowTerminal = false;
-            CloseGuard.Moved();
+            interaction.Moved();
             // The × looks like the end of the session, and is not.
             if (HasShell) interaction.Toast(new ToastMessage(ToastKind.Info, "终端栏已收起，会话没有断开", "恢复", () => { if (disposed == 0) ShowTerminal = true; }));
         });
-        HideMonitorCommand = new RelayCommand(() => { ShowMonitor = false; CloseGuard.Moved(); });
+        HideMonitorCommand = new RelayCommand(() => { ShowMonitor = false; interaction.Moved(); });
         AddTerminalCommand = new AsyncCommand(async () => await AddTerminalAsync(), e => Status = "新建终端失败：" + Short(e.Message));
         DismissFileNoticeCommand = new RelayCommand(() => FileNotice = "");
         CopyReportCommand = new AsyncCommand(CopyReportAsync, e => Status = "复制失败：" + Short(e.Message));
@@ -214,7 +215,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         tab.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(TerminalTabViewModel.IsRecording)) Raise(nameof(IsRecording));
-            else if (e.PropertyName == nameof(TerminalTabViewModel.IsPasteSlow)) Raise(nameof(IsPasteSlow));
+            else if (e.PropertyName is nameof(TerminalTabViewModel.IsPasteSlow) or nameof(TerminalTabViewModel.IsPasteStopping)) RaisePasteBar();
         };
         Terminals.Add(tab);
         CenterTabs.Add(tab);
@@ -239,7 +240,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         int index = CenterTabs.IndexOf(tab);
         if (index < 0) return;
         CenterTabs.RemoveAt(index);
-        CloseGuard.Moved();
+        interaction.Moved();
         if (ReferenceEquals(activeTab, tab)) ActiveTab = CenterTabs.Count == 0 ? null : CenterTabs[Math.Min(index, CenterTabs.Count - 1)];
         if (CenterTabs.Count == 0) { showTerminal = false; Raise(nameof(ShowTerminal)); }
     }

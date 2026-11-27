@@ -29,8 +29,12 @@ public static class CloseGuard
     /// <summary>The window the user last clicked or typed in: what goes away now went away there.</summary>
     static TopLevel? LastWindow => lastInput.TryGetTarget(out var window) ? window : null;
 
-    /// <summary>Something that had a × is gone: the others have moved, in the window the user acted in.</summary>
+    /// <summary>Something that had a × is gone: the others have moved, in the window the user acted in. Where the window
+    /// is known, <see cref="MovedIn"/>.</summary>
     public static void Moved() => Moved(Environment.TickCount64);
+    /// <summary>Something that had a × is gone from <paramref name="window"/>: its × have moved, whichever window the user
+    /// is in. Unknown (null): the window the user acted in.</summary>
+    public static void MovedIn(TopLevel? window) { if (window == null) Moved(); else Moved(window, Environment.TickCount64); }
     internal static void Moved(long now) => Moved(LastWindow, now);
     internal static void Moved(TopLevel? window, long now) => Volatile.Write(ref For(window).Until, now + (long)Pause.TotalMilliseconds);
     internal static void EndPauseForTest() { Volatile.Write(ref anywhere.Until, 0); foreach (var (_, state) in windows) Volatile.Write(ref state.Until, 0); }

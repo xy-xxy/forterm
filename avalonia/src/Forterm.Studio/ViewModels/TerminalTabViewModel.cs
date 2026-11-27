@@ -60,43 +60,61 @@ public sealed class TerminalTabViewModel(string title, StudioTerminalControl con
         watch?.SendAsync(System.Text.Encoding.UTF8.GetBytes(text), byUser, ct) ?? Task.CompletedTask;
 
     CancellationTokenSource? paste;
-    bool pasteSlow;
+    bool pasteSlow, pasteStopping, pasteBracketed;
 
     /// <summary>A paste is still going out: the server has not taken all of it.</summary>
     public bool IsPasting => paste != null;
     /// <summary>It has been going out for a while: time to offer to stop it.</summary>
     public bool IsPasteSlow => pasteSlow;
+    /// <summary>It was stopped from the bar, and the piece that had begun (and the closing bracket) still wait for the
+    /// server to take them. Nothing more of the text goes out.</summary>
+    public bool IsPasteStopping => pasteStopping;
+    /// <summary>The paste going out is bracketed: a stop still sends the closing bracket.</summary>
+    public bool IsPasteBracketed => pasteBracketed;
     /// <summary>How long a paste goes out before it can be stopped from the window.</summary>
     internal static TimeSpan SlowPaste { get; set; } = TimeSpan.FromMilliseconds(800);
 
-    /// <summary>Stops what of the paste has not gone out yet. The bar goes at once; a bracket that was opened still has to
-    /// be closed, when the server takes it.</summary>
+    /// <summary>Stops what of the paste has not begun to go out. The bar changes at once to say what still waits for the
+    /// server: the piece that has begun and a bracket that was opened.</summary>
     public bool CancelPaste()
     {
         if (paste is not { IsCancellationRequested: false } current) return false;
         current.Cancel();
-        if (pasteSlow) { pasteSlow = false; Raise(nameof(IsPasteSlow)); }
+        bool shown = pasteSlow;
+        pasteSlow = false;
+        pasteStopping = shown;
+        Raise(nameof(IsPasteSlow));
+        Raise(nameof(IsPasteStopping));
         return true;
     }
 
     /// <summary>Sends a paste the user agreed to (see <see cref="IdleWatch.SendPasteAsync"/>). One at a time: null when
-    /// another is still going out, or there is no shell. False = stopped by the user.</summary>
-    public async Task<bool?> PasteAsync(string head, string text, bool bracketed, CancellationToken lifetime)
+    /// another is still going out, or there is no shell.</summary>
+    public async Task<PasteOutcome?> PasteAsync(string head, string text, bool bracketed, CancellationToken lifetime)
     {
         if (watch is not { } to || paste != null) return null;
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         paste = cancel;
+        pasteBracketed = bracketed;
         Raise(nameof(IsPasting));
         _ = ShowSlowAsync(cancel);
-        try { return await to.SendPasteAsync(head, text, bracketed, cancel.Token, lifetime); }
+        try
+        {
+            bool whole = await to.SendPasteAsync(head, text, bracketed, cancel.Token, lifetime);
+            // Stopped while its last piece was already going out: nothing was left to stop.
+            return !whole ? PasteOutcome.Stopped : cancel.IsCancellationRequested && !lifetime.IsCancellationRequested ? PasteOutcome.WholeBeforeStop : PasteOutcome.Whole;
+        }
         finally
         {
             paste = null;
-            pasteSlow = false;
+            pasteSlow = pasteStopping = false;
             Raise(nameof(IsPasting));
             Raise(nameof(IsPasteSlow));
+            Raise(nameof(IsPasteStopping));
         }
     }
+
+    public enum PasteOutcome { Whole, Stopped, WholeBeforeStop }
 
     async Task ShowSlowAsync(CancellationTokenSource which)
     {

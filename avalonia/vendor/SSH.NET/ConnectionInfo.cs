@@ -519,5 +519,9 @@ namespace Renci.SshNet
         // Forterm: the largest packet the server is told it may send on a channel; 0 is the library's own (64 KiB).
         // OpenSSH says 32 KiB, PuTTY 16 KiB.
         public uint ChannelPacketSize { get; set; }
+
+        // Forterm: while this says true, the user is answering a question of this connection (its host key, a login
+        // prompt): that time does not count towards Timeout. The server's own limit still applies.
+        public Func<bool>? Answering { get; set; }
     }
 }

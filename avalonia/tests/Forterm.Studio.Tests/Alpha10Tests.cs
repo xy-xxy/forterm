@@ -781,11 +781,12 @@ public sealed class Alpha10Tests
             var image = window.FindControl<Image>("BackdropImage")!;
             Assert.True(image.IsVisible);
             Assert.NotNull(image.Source);
-            Assert.True(Application.Current!.TryGetResource("St.Panel", Application.Current.ActualThemeVariant, out var panel));
+            // The main window's own colours (alpha.11: no longer the application's, which every window uses).
+            Assert.True(window.TryFindResource("St.Panel", window.ActualThemeVariant, out var panel));
             Assert.Equal(0.6, ((ISolidColorBrush)panel!).Opacity, 3);
             Assert.Equal(0.6, ((ISolidColorBrush)w.Terminal!.Background!).Opacity, 3);
             // Dialogs stay solid, and so does the lock screen: nothing of the sessions shows through it.
-            Assert.True(Application.Current.TryGetResource("St.Dialog", Application.Current.ActualThemeVariant, out var dialog));
+            Assert.True(Application.Current!.TryGetResource("St.Dialog", Application.Current.ActualThemeVariant, out var dialog));
             Assert.Equal(1, ((ISolidColorBrush)dialog!).Opacity);
             var lockView = window.GetVisualDescendants().OfType<LockView>().Single();
             Assert.Equal(1, ((ISolidColorBrush)lockView.Background!).Opacity);
@@ -793,7 +794,7 @@ public sealed class Alpha10Tests
             Appearance.Apply(new StudioPreferences());
             Settle(window);
             Assert.False(image.IsVisible);
-            Assert.True(Application.Current.TryGetResource("St.Panel", Application.Current.ActualThemeVariant, out panel));
+            Assert.True(window.TryFindResource("St.Panel", window.ActualThemeVariant, out panel));
             Assert.Equal(1, ((ISolidColorBrush)panel!).Opacity);
             Assert.Equal(1, ((ISolidColorBrush)w.Terminal!.Background!).Opacity);
 

@@ -90,8 +90,14 @@ public sealed record StudioPreferences
     // "主题界面": a picture behind the window, and how much of the desktop shows through it.
     /// <summary>"自定义背景图片": a copy in the data directory (<see cref="Backdrop"/>); "" = none.</summary>
     public string BackgroundImage { get; init; } = "";
-    /// <summary>How much of the picture shows through the columns, 0.1–0.9.</summary>
+    /// <summary>How much of the picture (or with <see cref="ClearWindow"/>, of what is behind the window) shows through the
+    /// columns, 0.1–0.9.</summary>
     public double BackgroundStrength { get; init; } = 0.35;
+    /// <summary>"全局透明度（Beta）": the main window's surfaces let the desktop and other windows show through. Not with a
+    /// background picture: the picture is shown then.</summary>
+    public bool ClearWindow { get; init; }
+    /// <summary>With <see cref="ClearWindow"/>: what shows through is blurred, where the system can.</summary>
+    public bool ClearWindowBlur { get; init; }
     /// <summary>"全局不透明度" of the main window, 0.3–1.</summary>
     public double WindowOpacity { get; init; } = 1;
 
@@ -309,11 +315,29 @@ public static class Appearance
     static (string, bool, string, string, string, string, double) Visual(StudioPreferences p) => (p.Theme, p.FollowSystem, p.Accent, p.TitleBarColor, p.UiFont, p.TerminalScheme, SeeThrough(p));
     static (Application App, (string, bool, string, string, string, string, double) Visual)? applied;
 
-    /// <summary>How much of the background picture shows through the window's surfaces; 0 without one.</summary>
-    public static double SeeThrough(StudioPreferences p) => p.BackgroundImage.Length > 0 ? p.BackgroundStrength : 0;
-    /// <summary>The surfaces a background picture shows through. Dialogs, menus and fields stay solid.</summary>
-    static readonly string[] Surfaces = ["St.Window", "St.Panel", "St.Card", "St.TitleBar", "St.TerminalBack", "St.Terminal"];
-    static bool variantWatched;
+    /// <summary>How much of the background picture, or of what is behind a clear window, shows through the main window's
+    /// surfaces; 0 with neither.</summary>
+    public static double SeeThrough(StudioPreferences p) => p.BackgroundImage.Length > 0 || p.ClearWindow ? p.BackgroundStrength : 0;
+    /// <summary>"全局透明度": the window itself is clear. Not with a picture, which is shown instead.</summary>
+    public static bool IsClear(StudioPreferences p) => p.ClearWindow && p.BackgroundImage.Length == 0;
+    /// <summary>The surfaces of the main window a background picture (or the desktop) shows through. Dialogs, menus and
+    /// fields stay solid, and so does every other window: the see-through copies are the main window's own resources.</summary>
+    public static readonly string[] Surfaces = ["St.Window", "St.Panel", "St.Card", "St.TitleBar", "St.TerminalBack", "St.Terminal"];
+
+    /// <summary>The see-through copies of <see cref="Surfaces"/> as the colours are now; empty when nothing shows through.</summary>
+    public static Dictionary<string, ISolidColorBrush> SeeThroughBrushes(StudioPreferences preferences)
+    {
+        var brushes = new Dictionary<string, ISolidColorBrush>();
+        if (Application.Current is not { } app || SeeThrough(preferences) is not (> 0 and var through)) return brushes;
+        foreach (string key in Surfaces)
+            if (app.TryGetResource(key, app.ActualThemeVariant, out object? value) && value is ISolidColorBrush brush)
+                brushes[key] = new SolidColorBrush(brush.Color, 1 - through);
+        return brushes;
+    }
+
+    /// <summary>A surface as it is without anything showing through.</summary>
+    public static ISolidColorBrush? Solid(string key) =>
+        Application.Current is { } app && app.TryGetResource(key, app.ActualThemeVariant, out object? value) ? value as ISolidColorBrush : null;
 
     public static void Apply(StudioPreferences preferences)
     {
@@ -362,19 +386,6 @@ public static class Appearance
         resources["St.AccentHover"] = Brush(Mix(preferences.Accent, "#FFFFFF", 0.12));
         resources["St.AccentSoft"] = new SolidColorBrush(Color.FromArgb(0x33, accent.R, accent.G, accent.B));
         resources["SystemAccentColor"] = accent;
-        if (SeeThrough(preferences) is > 0 and var through)
-        {
-            // The colours as they are now, with the picture showing through them.
-            foreach (string key in Surfaces)
-                if (app.TryGetResource(key, app.ActualThemeVariant, out object? value) && value is ISolidColorBrush brush)
-                    resources[key] = new SolidColorBrush(brush.Color, 1 - through);
-            if (!variantWatched)
-            {
-                // The system switched between light and dark: the see-through colours follow.
-                variantWatched = true;
-                app.ActualThemeVariantChanged += (_, _) => { if (SeeThrough(Current) > 0) { applied = null; Apply(Current); } };
-            }
-        }
         Changed?.Invoke(preferences);
     }
 
