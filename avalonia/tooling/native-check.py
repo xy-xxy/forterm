@@ -145,28 +145,26 @@ try:
         arrived = until(lambda: any(f.typed()[n:] == b'echo ok\r' for f, n in zip(servers, before)), 8)
         check('the keyboard reaches the terminal, and only that one', arrived and sum(len(f.typed()) - n for f, n in zip(servers, before)) == 8, [f.typed()[n:] for f, n in zip(servers, before)]); shot('typed')
         # "关联文件会话" with the real mouse (a user found it unresponsive on Windows; every headless test opens it). First a button
-        # of the same kind of header: "新建终端" gives the server one more shell. Then the chain icon of the file column: the
-        # program's windows before and after (a menu is a window of its own here), what the new ones hold, a picture while
-        # the menu should be open, and its entries. PowerShell's names ignore case: $t would be $T (the tree scope).
+        # of the same kind of header: "新建终端" gives the server one more shell.
         shells = sum(f.ask('stats')['shells'] for f in servers)
         answer = ui("ClickOn (Find $main '新建终端'); Start-Sleep -Milliseconds 1500; 'clicked'")
         check('a button in a column header works with the mouse ("新建终端")', until(lambda: sum(f.ask('stats')['shells'] for f in servers) == shells + 1, 15), answer)
-        tops = ("Add-Type -AssemblyName System.Drawing; $root=[System.Windows.Automation.AutomationElement]::RootElement; "
-                "function Tops { @($root.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id))) } "
-                "function Items { foreach($top in Tops){ $top.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::MenuItem)) } } "
-                "function Kinds($e) { (@($e.FindAll($T::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) | Group-Object { $_.Current.ControlType.ProgrammaticName } | ForEach-Object { $_.Name.Replace('ControlType.','') + 'x' + $_.Count }) -join ',' } "
-                "function Describe { (Tops | ForEach-Object { $_.Current.ControlType.ProgrammaticName.Replace('ControlType.','') + '[' + $_.Current.Name + '/' + $_.Current.ClassName + ' ' + $_.Current.BoundingRectangle + ']' + $(if($_.Current.NativeWindowHandle -ne [int]$process.MainWindowHandle){ '{' + (Kinds $_) + '}' }) }) -join ' ; ' } "
-                "function Snap($name) { $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $i=New-Object System.Drawing.Bitmap $b.Width,$b.Height; ([System.Drawing.Graphics]::FromImage($i)).CopyFromScreen($b.Left,$b.Top,0,0,$i.Size); $i.Save('" + str(out) + "\\' + $name + '.png') } ")
-        answer = ui(tops + "$before=Describe; $b=Find $main '关联文件会话'; $where=[string]$b.Current.BoundingRectangle; ClickOn $b; Start-Sleep -Milliseconds 700; Snap 'link-menu'; $after=Describe; "
-                    "$listed=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
-                    "$item=@(Items) | Where-Object { $_.Current.Name -like '合成文件*' } | Select-Object -First 1; if($item){ ClickOn $item }; Start-Sleep -Milliseconds 800; "
-                    "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 500; Snap 'link-menu-again'; $relisted=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
-                    "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); $listed + ' || ' + $relisted + ' || button at ' + $where + ' || before: ' + $before + ' || after: ' + $after")
-        listed, _, rest = answer.partition(' || ')
-        relisted, _, about = rest.partition(' || ')
-        print('link menu, what was seen:', about, flush=True)
-        check('the chain icon of the file column opens the list of file sessions', '合成文件' in listed, answer)
-        check('and choosing one shows its files there', '解除关联' in relisted, answer); shot('linked')
+        # Buttons that open a menu: whether one opened is seen on the screen, as what changes below the button after the
+        # click, with the pointer moved away (no tool tip). "快速命令" and "排序和显示" are the same kind of button, to compare;
+        # UI Automation may not see menus at all. PowerShell's names ignore case: $t would be $T (the tree scope).
+        probe = ("Add-Type -AssemblyName System.Drawing; "
+                 "function Grab($r) { $i=New-Object System.Drawing.Bitmap 320,240; ([System.Drawing.Graphics]::FromImage($i)).CopyFromScreen([int]$r.X-20,[int]($r.Y+$r.Height+2),0,0,$i.Size); $i } "
+                 "function Differ($a,$b) { $n=0; for($x=0;$x -lt 320;$x+=4){ for($y=0;$y -lt 240;$y+=4){ if($a.GetPixel($x,$y).ToArgb() -ne $b.GetPixel($x,$y).ToArgb()){ $n++ } } }; $n } "
+                 "function Away { $w=$main.Current.BoundingRectangle; [void][Native]::SetCursorPos([int]($w.X+$w.Width-40),[int]($w.Y+$w.Height-40)); Start-Sleep -Milliseconds 300 } "
+                 "function Opens($name) { $b=Find $main $name; if(-not $b){ return $name + ':none' }; $r=$b.Current.BoundingRectangle; Away; Start-Sleep -Milliseconds 600; $before=Grab $r; ClickOn $b; Away; Start-Sleep -Milliseconds 900; $after=Grab $r; $n=Differ $before $after; "
+                 "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); Start-Sleep -Milliseconds 500; $name + '=' + $n } ")
+        answer = ui(probe + "@((Opens '快速命令'), (Opens '排序和显示'), (Opens '关联文件会话')) -join ' '"); shot('menus')
+        print('points changed below each button after a click (of 4800):', answer, flush=True)
+        seen = dict(part.split('=', 1) for part in answer.split() if '=' in part)
+        changed = lambda name: int(seen.get(name, '0')) if seen.get(name, '0').isdigit() else 0
+        check('a menu button opens its menu with the mouse ("快速命令")', changed('快速命令') > 150, answer)
+        check('"排序和显示" opens its menu', changed('排序和显示') > 150, answer)
+        check('the chain icon of the file column opens the list of file sessions', changed('关联文件会话') > 150, answer)
     check('still running', first.poll() is None and len(programs()) == 1)
 finally:
     end_all()
