@@ -290,6 +290,11 @@ class FixtureSFTPServer(paramiko.SFTPServer):
    self._send_status(request,code);return
   return super()._process(kind,request,msg)
  def _send_server_version(self):
+  # FIXTURE_SFTP_SILENT=1: the file channel opens but never answers (as a bastion's terminal route was seen to do).
+  if os.getenv('FIXTURE_SFTP_SILENT')=='1':
+   self._read_packet()
+   while self.sock.recv(1):pass
+   raise EOFError('silent')
   if os.getenv('FIXTURE_POSIX')!='1':return super()._send_server_version()
   from paramiko.sftp import CMD_INIT,CMD_VERSION
   kind,data=self._read_packet()

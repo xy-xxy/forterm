@@ -62,7 +62,7 @@ public sealed class EvidenceRenderTests
     {
         using var h = new StudioHarness();
         var store = new AccountStore(h.Data);
-        var accounts = new AccountsViewModel(store, h.Credentials, h.Interaction, () => DateTimeOffset.FromUnixTimeSeconds(1_700_000_000), startTimer: false, open: (_, _, _) => Task.CompletedTask);
+        var accounts = new AccountsViewModel(store, h.Credentials, h.Interaction, () => DateTimeOffset.FromUnixTimeSeconds(1_700_000_000), startTimer: false, logIn: _ => { });
         accounts.AddCommand.Execute(null);
         accounts.EditName = "示例堡垒机";
         accounts.EditUrl = "https://bastion.example";

@@ -24,6 +24,23 @@ public sealed record BastionAccount
     public int Period { get; init; } = 30;
 
     public TotpParameters Parameters => new(Algorithm, Digits, Period);
+    /// <summary>Logins of target hosts kept for the portal's <c>$user</c> accounts ("目标主机凭据"): name and user here,
+    /// the password only in the credential store (kind <see cref="BastionLogin.SecretKind"/> under the login's id).</summary>
+    public IReadOnlyList<BastionLogin> Logins { get; init; } = [];
+    /// <summary>What the user chose last in the account list of each machine (its portal id; <c>*</c>: the last of all):
+    /// <c>account:&lt;name&gt;</c>, <c>login:&lt;id&gt;</c> or <c>ask</c>. No secret.</summary>
+    public IReadOnlyDictionary<string, string> Choices { get; init; } = new Dictionary<string, string>();
+}
+
+/// <summary>A target host's login kept for a bastion account: the name the user gave it and the user name; the password is
+/// in the credential store only.</summary>
+public sealed record BastionLogin
+{
+    public const string SecretKind = "target";
+    public string Id { get; init; } = StudioProfile.NewId();
+    public string Name { get; init; } = "";
+    public string User { get; init; } = "";
+    public string Label => Name.Length > 0 ? $"{Name}（{User}）" : User;
 }
 
 public sealed class AccountStore
@@ -66,9 +83,11 @@ public sealed class AccountStore
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             string temp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(next, Json);
+            if (bytes.Length > 4 * 1024 * 1024) throw new InvalidDataException("账户文件会超过 4MiB（读取时的上限），没有保存");
             try
             {
-                File.WriteAllBytes(temp, JsonSerializer.SerializeToUtf8Bytes(next, Json));
+                File.WriteAllBytes(temp, bytes);
                 File.Move(temp, path, overwrite: true);
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
@@ -91,5 +110,17 @@ public sealed class AccountStore
                 throw new InvalidDataException("门户地址必须是不含账号密码的 http(s) 地址");
         }
         try { a.Parameters.Validate(); } catch (IOException e) { throw new InvalidDataException(e.Message); }
+        if (a.Logins.Count > 50) throw new InvalidDataException("目标主机凭据最多 50 个");
+        foreach (var login in a.Logins)
+        {
+            if (login.Id.Length is 0 or > 64 || !login.Id.All(char.IsAsciiLetterOrDigit)) throw new InvalidDataException("凭据标识无效");
+            if (login.Name.Length > 64 || login.Name.Any(char.IsControl)) throw new InvalidDataException("凭据名称最长 64 个字符，不能有控制字符");
+            // Sent to the portal as its page sends it, unencoded: nothing that would add a parameter there.
+            if (login.User.Trim().Length is 0 or > 128 || login.User.Any(char.IsControl) || login.User.IndexOfAny(['&', '=', '%', '+', '#']) >= 0)
+                throw new InvalidDataException("凭据的用户名不能为空，最长 128 个字符，不能有 & = % + # 或控制字符");
+        }
+        if (a.Logins.Select(l => l.Id).Distinct().Count() != a.Logins.Count) throw new InvalidDataException("凭据标识重复");
+        if (a.Choices.Count > 5000 || a.Choices.Any(c => c.Key.Length is 0 or > 64 || c.Value.Length > 200 || c.Key.Any(char.IsControl) || c.Value.Any(char.IsControl)))
+            throw new InvalidDataException("记住的选择无效");
     }
 }

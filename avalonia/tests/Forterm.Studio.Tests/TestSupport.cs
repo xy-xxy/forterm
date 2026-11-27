@@ -180,8 +180,6 @@ internal sealed class ScriptedInteraction(params string[][] answers) : IStudioIn
     public Task OpenUrlAsync(string url) { OpenedUrls.Add(url); return Task.CompletedTask; }
     public AccountsViewModel? AccountsShown { get; private set; }
     public void ShowAccounts(AccountsViewModel accounts) => AccountsShown = accounts;
-    public BastionAssetsViewModel? BastionShown { get; private set; }
-    public void ShowBastion(BastionAssetsViewModel assets) { BastionShown?.Dispose(); BastionShown = assets; }
     public SettingsViewModel? SettingsShown { get; private set; }
     public void ShowSettings(SettingsViewModel settings) { SettingsShown?.Dispose(); SettingsShown = settings; }
     public List<PasteReview> Pastes { get; } = new();
@@ -210,7 +208,9 @@ internal sealed class MemoryVault : ISecretVault
 {
     public ConcurrentDictionary<string, byte[]> Items { get; } = new();
     public Task<byte[]?> ReadAsync(string key, CancellationToken ct) => Task.FromResult(Items.TryGetValue(key, out var v) ? (byte[]?)v.ToArray() : null);
-    public Task WriteAsync(string key, byte[] secret, CancellationToken ct) { Items[key] = secret.ToArray(); return Task.CompletedTask; }
+    /// <summary>Runs after a secret is written (simulates something changing while the OS store is busy).</summary>
+    public Action<string>? OnWrite { get; set; }
+    public Task WriteAsync(string key, byte[] secret, CancellationToken ct) { Items[key] = secret.ToArray(); OnWrite?.Invoke(key); return Task.CompletedTask; }
     public Task DeleteAsync(string key, CancellationToken ct) { Items.TryRemove(key, out _); return Task.CompletedTask; }
 }
 

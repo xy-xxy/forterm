@@ -350,16 +350,23 @@ public sealed partial class WorkspaceView : UserControl
                     if (model is not { } desk) return;
                     var choices = desk.LinkChoices;
                     foreach (var source in choices)
-                        menu.Items.Add(new MenuItem
+                    {
+                        var item = new MenuItem
                         {
                             Header = new TextBlock { Text = desk.LinkLabel(source), MaxWidth = 420, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis },
                             Icon = new StrokeIcon { Data = Application.Current!.TryGetResource("Icon.Check", null, out object? icon) ? icon as Avalonia.Media.Geometry : null, Width = 12, Height = 12, IsVisible = ReferenceEquals(source, desk.FileView) },
                             Command = new RelayCommand(() => desk.Link(source)),
-                        });
+                        };
+                        // What a screen reader (and the Windows check) reads: the header is a text block, not text.
+                        Avalonia.Automation.AutomationProperties.SetName(item, desk.LinkLabel(source));
+                        menu.Items.Add(item);
+                    }
                     if (choices.Count == 0) menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "没有打开的文件会话。请先从控制器用 xftp 打开，或在连接库打开 SFTP / FTP 连接。", MaxWidth = 320, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, IsEnabled = false });
                     if (!desk.ShowsLinkedFiles) return;
                     menu.Items.Add(new Separator());
-                    menu.Items.Add(new MenuItem { Header = new TextBlock { Text = "解除关联，恢复为单独的页签" }, Command = new RelayCommand(desk.Unlink) });
+                    var unlink = new MenuItem { Header = new TextBlock { Text = "解除关联，恢复为单独的页签" }, Command = new RelayCommand(desk.Unlink) };
+                    Avalonia.Automation.AutomationProperties.SetName(unlink, "解除关联，恢复为单独的页签");
+                    menu.Items.Add(unlink);
                 };
     }
 

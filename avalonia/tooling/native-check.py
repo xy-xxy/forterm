@@ -144,6 +144,17 @@ try:
         answer = ui("$r=$main.Current.BoundingRectangle; Click ($r.X+$r.Width*0.5) ($r.Y+$r.Height*0.5); [System.Windows.Forms.SendKeys]::SendWait('echo ok{ENTER}'); Start-Sleep -Milliseconds 800; 'sent'")
         arrived = until(lambda: any(f.typed()[n:] == b'echo ok\r' for f, n in zip(servers, before)), 8)
         check('the keyboard reaches the terminal, and only that one', arrived and sum(len(f.typed()) - n for f, n in zip(servers, before)) == 8, [f.typed()[n:] for f, n in zip(servers, before)]); shot('typed')
+        # "关联文件会话" with the real mouse: the chain icon of the file column lists the open file sessions (its menu is a
+        # window of its own here), and choosing one shows its files there: its tab, a file session's only, goes away.
+        menu = ("$root=[System.Windows.Automation.AutomationElement]::RootElement; "
+                "function Items { foreach($t in $root.FindAll($T::Children,(By $A::ProcessIdProperty $process.Id))){ $t.FindAll($T::Descendants,(By $A::ControlTypeProperty $C::MenuItem)) } } ")
+        answer = ui(menu + "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 500; $first=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
+                    "$i=@(Items) | Where-Object { $_.Current.Name -like '合成文件*' } | Select-Object -First 1; if($i){ ClickOn $i }; Start-Sleep -Milliseconds 800; "
+                    "ClickOn (Find $main '关联文件会话'); Start-Sleep -Milliseconds 500; $second=(@(Items) | ForEach-Object { $_.Current.Name }) -join '|'; "
+                    "[System.Windows.Forms.SendKeys]::SendWait('{ESC}'); $first + ' || ' + $second")
+        listed, _, relisted = answer.partition(' || ')
+        check('the chain icon of the file column opens the list of file sessions', '合成文件' in listed, answer)
+        check('and choosing one shows its files there', '解除关联' in relisted, answer); shot('linked')
     check('still running', first.poll() is None and len(programs()) == 1)
 finally:
     end_all()

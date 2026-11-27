@@ -89,6 +89,7 @@ public sealed class LibraryViewModel : ObservableObject, IDisposable
         ("ssh", "SSH", ["ssh", "sftp"]),
         ("ftp", "FTP", ["ftp"]),
         ("telnet", "Telnet", ["telnet"]),
+        ("bastion", "堡垒机", []),
         ("tunnel", "隧道", []),
     ];
 
@@ -167,6 +168,7 @@ public sealed class LibraryViewModel : ObservableObject, IDisposable
             foreach (var tab in Tabs) tab.IsActive = ReferenceEquals(tab, value);
             Raise(nameof(NewConnectionLabel));
             Raise(nameof(IsTunnelTab));
+            Raise(nameof(IsBastionTab));
             Raise(nameof(IsHostTab));
             selectedNode = null;
             Rebuild();
@@ -230,7 +232,11 @@ public sealed class LibraryViewModel : ObservableObject, IDisposable
     /// <summary>The 隧道 tab's content (set by the main view model).</summary>
     public TunnelsViewModel? Tunnels { get; set; }
     public bool IsTunnelTab => selectedTab.Key == "tunnel";
-    public bool IsHostTab => !IsTunnelTab;
+    /// <summary>The "堡垒机" tab's content (set by the main view model): bastion accounts and the machines of one.</summary>
+    public BastionHubViewModel? Bastions { get; set; }
+    public bool IsBastionTab => selectedTab.Key == "bastion";
+    public bool IsHostTab => !IsTunnelTab && !IsBastionTab;
+    public void ShowBastions() => SelectedTab = Tabs.First(t => t.Key == "bastion");
 
     void Report(Exception e) => Notice = WorkspaceViewModel.Short(e.Message);
 

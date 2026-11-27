@@ -1,0 +1,232 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Forterm.Studio.ViewModels"
+             xmlns:c="using:Forterm.Studio.Controls"
+             xmlns:lib="using:Forterm.Studio.Library"
+             x:Class="Forterm.Studio.Views.BastionHubView"
+             x:DataType="vm:BastionHubViewModel">
+  <!-- The library's own styles (tool, connect, search, hosts, head) come from LibraryView, which holds this view. -->
+  <UserControl.Styles>
+    <Style Selector="ListBox.bastions ListBoxItem">
+      <Setter Property="Padding" Value="10,8"/>
+      <Setter Property="Margin" Value="6,1"/>
+      <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="ListBox.bastions ListBoxItem:selected /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/></Style>
+    <Style Selector="ListBox.bastions ListBoxItem:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.Hover}"/></Style>
+    <Style Selector="ListBox.bastions ListBoxItem:selected:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource St.AccentSoft}"/></Style>
+    <Style Selector="ListBox.hosts ComboBox"><Setter Property="MinHeight" Value="0"/><Setter Property="Height" Value="28"/><Setter Property="Padding" Value="8,0"/><Setter Property="FontSize" Value="12.5"/></Style>
+    <Style Selector="TextBlock.label"><Setter Property="Foreground" Value="{DynamicResource St.TextDim}"/><Setter Property="FontSize" Value="12"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="Auto,*">
+    <!-- Left: the bastions -->
+    <Border Width="236" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" Height="48" ColumnDefinitions="*,Auto" Margin="14,0,10,0">
+          <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+            <c:StrokeIcon Data="{StaticResource Icon.Shield}" Width="14" Height="14" Brush="{DynamicResource St.Accent}"/>
+            <TextBlock Text="堡垒机" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{DynamicResource St.TextStrong}"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+            <Button Classes="tool square" Command="{Binding ManageCommand}" ToolTip.Tip="堡垒机账户：编辑、删除、动态口令" AutomationProperties.Name="管理堡垒机账户">
+              <c:StrokeIcon Data="{StaticResource Icon.Key}" Width="12" Height="12"/>
+            </Button>
+            <Button Classes="tool" Command="{Binding AddCommand}" AutomationProperties.Name="添加堡垒机账户">
+              <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="10" Height="10" Thickness="2.4"/><TextBlock Text="账户" VerticalAlignment="Center"/></StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Classes="dim" FontSize="11" TextWrapping="Wrap" Margin="14,8,14,12" LineHeight="16"
+                   Text="只在点“登录”时访问门户；第一次会先核对门户证书。密码和动态口令密钥只在系统凭据中。"/>
+        <ListBox Name="Accounts" Classes="bastions" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="堡垒机列表">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="vm:BastionAccountItem">
+              <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding Portal}">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource St.TextStrong}"/>
+                  <TextBlock Text="{Binding Detail}" Classes="dim" FontSize="11.5" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <Border Grid.Column="1" Width="7" Height="7" CornerRadius="4" Background="{DynamicResource St.Accent}" VerticalAlignment="Center" Margin="8,0,0,0"
+                        IsVisible="{Binding IsLoggedIn}" ToolTip.Tip="已登录"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <!-- Right: the machines of the chosen one -->
+    <Panel Grid.Column="1">
+      <!-- no account yet -->
+      <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="460" Margin="0,0,0,60">
+        <Border Width="76" Height="76" CornerRadius="38" Background="{DynamicResource St.AccentSoft}" HorizontalAlignment="Center">
+          <c:StrokeIcon Data="{StaticResource Icon.Shield}" Width="34" Height="34" Thickness="1.5" Brush="{DynamicResource St.Accent}"/>
+        </Border>
+        <TextBlock Text="还没有堡垒机账户" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource St.TextStrong}" Margin="0,4,0,0"/>
+        <TextBlock Classes="dim" TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" LineHeight="20"
+                   Text="添加堡垒机账户（门户地址、租户、用户名，可选保存密码和动态口令密钥）后，可以在这里不进浏览器登录堡垒机，列出能访问的机器，直接打开 SSH / SFTP。"/>
+        <Button Classes="primary" Command="{Binding AddCommand}" HorizontalAlignment="Center" Margin="0,6,0,0" AutomationProperties.Name="添加堡垒机账户（空状态）">
+          <StackPanel Orientation="Horizontal" Spacing="6"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="12" Height="12" Thickness="2.4" Brush="{DynamicResource St.OnAccent}"/><TextBlock Text="添加堡垒机账户" VerticalAlignment="Center"/></StackPanel>
+        </Button>
+      </StackPanel>
+
+      <!-- chosen, not logged in -->
+      <StackPanel IsVisible="{Binding Current.IsLoggedOut, FallbackValue=False}" HorizontalAlignment="Center" VerticalAlignment="Center" Width="420" Margin="0,0,0,60" Spacing="14">
+        <Border Width="64" Height="64" CornerRadius="32" Background="{DynamicResource St.AccentSoft}" HorizontalAlignment="Center">
+          <c:StrokeIcon Data="{StaticResource Icon.Lock}" Width="28" Height="28" Thickness="1.6" Brush="{DynamicResource St.Accent}"/>
+        </Border>
+        <TextBlock Text="{Binding Selected.Name, FallbackValue=''}" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource St.TextStrong}" TextTrimming="CharacterEllipsis"/>
+        <Border Classes="card" Padding="16,12">
+          <Grid ColumnDefinitions="64,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+            <TextBlock Classes="label" Text="门户"/>
+            <TextBlock Grid.Column="1" Text="{Binding Selected.Portal, FallbackValue=''}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="1" Classes="label" Text="租户"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Account.TenantName, FallbackValue=''}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="2" Classes="label" Text="用户名"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Account.Username, FallbackValue=''}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+          </Grid>
+        </Border>
+        <Button Classes="primary" Command="{Binding Current.LoginCommand}" IsVisible="{Binding Selected.CanLogIn, FallbackValue=False}" IsEnabled="{Binding Current.IsIdle, FallbackValue=False}"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="34" AutomationProperties.Name="登录堡垒机">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <c:BusyRing Width="13" Height="13" Brush="{DynamicResource St.OnAccent}" IsActive="{Binding Current.IsBusy, FallbackValue=False}" IsVisible="{Binding Current.IsBusy, FallbackValue=False}" VerticalAlignment="Center"/>
+            <TextBlock Text="登录" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+        <StackPanel IsVisible="{Binding !Selected.CanLogIn, FallbackValue=False}" Spacing="8">
+          <TextBlock Classes="dim" TextWrapping="Wrap" TextAlignment="Center" FontSize="12.5" Text="登录需要 https:// 开头的门户地址、租户名称和用户名，请先编辑这个账户。"/>
+          <Button Classes="secondary" Content="编辑账户" Command="{Binding ManageCommand}" HorizontalAlignment="Center"/>
+        </StackPanel>
+        <TextBlock Name="LoginStatus" Text="{Binding Current.Status, FallbackValue=''}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12.5" Foreground="{DynamicResource St.TextDim}"/>
+      </StackPanel>
+
+      <!-- logged in: the machines, as the library lists its own -->
+      <DockPanel IsVisible="{Binding Current.IsLoggedIn, FallbackValue=False}">
+        <Grid DockPanel.Dock="Top" Height="52" ColumnDefinitions="Auto,Auto,*,Auto" Margin="14,0,12,0">
+          <TextBlock Text="{Binding Selected.Name, FallbackValue=''}" VerticalAlignment="Center" Margin="0,0,14,0" MaxWidth="240" TextTrimming="CharacterEllipsis" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource St.TextStrong}"/>
+          <TextBox Grid.Column="1" Name="QueryBox" Classes="search" Width="320" Text="{Binding Current.Query, FallbackValue=''}" PlaceholderText="搜索名称或地址（由堡垒机查找）" VerticalAlignment="Center" AutomationProperties.Name="搜索资产">
+            <TextBox.InnerLeftContent><c:StrokeIcon Data="{StaticResource Icon.Search}" Width="13" Height="13" Margin="10,0,2,0" Opacity="0.7"/></TextBox.InnerLeftContent>
+            <TextBox.KeyBindings><KeyBinding Gesture="Enter" Command="{Binding Current.SearchCommand, FallbackValue={x:Null}}"/></TextBox.KeyBindings>
+          </TextBox>
+          <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Classes="tool" Command="{Binding Current.Logins.ToggleCommand, FallbackValue={x:Null}}" Classes.on="{Binding Current.Logins.IsOpen, FallbackValue=False}"
+                    ToolTip.Tip="保存目标主机的用户名和密码，在机器的账号列表里选用，不用每次输入" AutomationProperties.Name="目标主机凭据">
+              <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Key}" Width="11" Height="11"/><TextBlock Text="目标凭据" VerticalAlignment="Center"/></StackPanel>
+            </Button>
+            <Button Classes="tool square" Command="{Binding Current.RefreshCommand, FallbackValue={x:Null}}" IsEnabled="{Binding Current.IsIdle, FallbackValue=False}" ToolTip.Tip="重新读取这一页" AutomationProperties.Name="刷新资产">
+              <c:StrokeIcon Data="{StaticResource Icon.Refresh}" Width="12" Height="12"/>
+            </Button>
+            <Button Classes="tool" Command="{Binding Current.LogoutCommand, FallbackValue={x:Null}}" IsEnabled="{Binding Current.IsIdle, FallbackValue=False}" AutomationProperties.Name="退出登录">
+              <StackPanel Orientation="Horizontal" Spacing="5"><c:StrokeIcon Data="{StaticResource Icon.Export}" Width="11" Height="11"/><TextBlock Text="退出登录" VerticalAlignment="Center"/></StackPanel>
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <!-- what happened, and the pages -->
+        <Border DockPanel.Dock="Bottom" Height="44" BorderBrush="{DynamicResource St.Line}" BorderThickness="0,1,0,0" Margin="12,0">
+          <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="4,0">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <c:BusyRing Width="13" Height="13" Brush="{DynamicResource St.Accent}" IsActive="{Binding Current.IsBusy, FallbackValue=False}" IsVisible="{Binding Current.IsBusy, FallbackValue=False}" VerticalAlignment="Center"/>
+              <TextBlock Name="AssetStatus" Text="{Binding Current.Status, FallbackValue=''}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Current.Status, FallbackValue=''}"/>
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding Current.PageText, FallbackValue=''}" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="12,0,10,0"/>
+            <Button Grid.Column="2" Classes="tool" Content="上一页" Command="{Binding Current.PreviousCommand, FallbackValue={x:Null}}" IsEnabled="{Binding Current.CanGoBack, FallbackValue=False}" Margin="0,0,6,0"/>
+            <Button Grid.Column="3" Classes="tool" Content="下一页" Command="{Binding Current.NextCommand, FallbackValue={x:Null}}" IsEnabled="{Binding Current.CanGoOn, FallbackValue=False}"/>
+          </Grid>
+        </Border>
+
+        <!-- "目标主机凭据": kept once, chosen in the account list of a machine -->
+        <Border DockPanel.Dock="Right" Width="300" IsVisible="{Binding Current.Logins.IsOpen, FallbackValue=False}" Background="{DynamicResource St.Card}" CornerRadius="8" Margin="0,0,12,8" Padding="14,12">
+          <DockPanel DataContext="{Binding Current.Logins}" x:DataType="vm:BastionLoginsViewModel">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto">
+              <TextBlock Text="目标主机凭据" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{DynamicResource St.TextStrong}"/>
+              <Button Grid.Column="1" Classes="flat" Command="{Binding ToggleCommand}" ToolTip.Tip="收起" AutomationProperties.Name="收起目标主机凭据">
+                <c:StrokeIcon Data="{StaticResource Icon.Close}" Width="10" Height="10"/>
+              </Button>
+            </Grid>
+            <TextBlock DockPanel.Dock="Top" Classes="dim" FontSize="11.5" TextWrapping="Wrap" LineHeight="17" Margin="0,6,0,10"
+                       Text="给 $user 账号用：在机器的“账号”里选它，打开时不用再输入。密码只在系统凭据中；每台机器选过的会被记住。"/>
+            <!-- the form -->
+            <StackPanel DockPanel.Dock="Top" IsVisible="{Binding IsEditing}" Spacing="8">
+              <TextBlock Text="{Binding EditTitle}" FontSize="12.5" FontWeight="SemiBold"/>
+              <TextBox Text="{Binding EditName}" PlaceholderText="名称（可选），例如 运维账号" AutomationProperties.Name="凭据名称"/>
+              <TextBox Text="{Binding EditUser}" PlaceholderText="目标主机的用户名" AutomationProperties.Name="凭据用户名"/>
+              <TextBox Text="{Binding EditPassword}" PasswordChar="•" PlaceholderText="{Binding PasswordHint}" AutomationProperties.Name="凭据密码"/>
+              <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" FontSize="12"/>
+              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Classes="secondary" Content="取消" Command="{Binding CancelCommand}"/>
+                <Button Classes="primary" Content="保存" Command="{Binding SaveCommand}" AutomationProperties.Name="保存凭据"/>
+              </StackPanel>
+            </StackPanel>
+            <!-- the list -->
+            <StackPanel DockPanel.Dock="Top" IsVisible="{Binding IsListing}" Spacing="8">
+              <TextBlock Text="还没有保存的凭据" Classes="dim" FontSize="12" IsVisible="{Binding IsEmpty}" Margin="0,4"/>
+              <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="lib:BastionLogin">
+                    <Grid ColumnDefinitions="*,Auto,Auto" Height="34">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Label}" FontSize="12.5" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource St.TextStrong}"/>
+                      </StackPanel>
+                      <Button Grid.Column="1" Classes="link" Content="编辑" Command="{Binding $parent[ItemsControl].((vm:BastionLoginsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}"/>
+                      <Button Grid.Column="2" Classes="link" Content="删除" Foreground="{DynamicResource St.Danger}" Command="{Binding $parent[ItemsControl].((vm:BastionLoginsViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Button Classes="tool" Command="{Binding AddCommand}" HorizontalAlignment="Left" AutomationProperties.Name="新建凭据">
+                <StackPanel Orientation="Horizontal" Spacing="4"><c:StrokeIcon Data="{StaticResource Icon.Plus}" Width="10" Height="10" Thickness="2.4"/><TextBlock Text="新建凭据" VerticalAlignment="Center"/></StackPanel>
+              </Button>
+              <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" FontSize="12"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Height="36" Background="{DynamicResource St.Card}" Margin="12,0" CornerRadius="6">
+          <Grid ColumnDefinitions="96,2*,2*,180,170" Margin="14,0,2,0">
+            <TextBlock Classes="head" Text="系统"/>
+            <TextBlock Grid.Column="1" Classes="head" Text="名称"/>
+            <TextBlock Grid.Column="2" Classes="head" Text="地址"/>
+            <TextBlock Grid.Column="3" Classes="head" Text="账号"/>
+            <TextBlock Grid.Column="4" Classes="head" Text="打开" Margin="12,0,0,0"/>
+          </Grid>
+        </Border>
+
+        <Panel>
+          <ListBox Name="Assets" Classes="hosts" ItemsSource="{Binding Current.Assets, FallbackValue={x:Null}}" Background="Transparent" Margin="12,2,12,0" AutomationProperties.Name="堡垒机资产">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="vm:BastionAssetRow">
+                <Grid ColumnDefinitions="96,2*,2*,180,170" Height="44" Margin="14,0,2,0" Background="Transparent">
+                  <Border Background="{DynamicResource St.AccentSoft}" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center" MaxWidth="88" IsVisible="{Binding TypeName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Text="{Binding TypeName}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource St.Accent}" TextTrimming="CharacterEllipsis"/>
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" Foreground="{DynamicResource St.TextStrong}" ToolTip.Tip="{Binding Name}"/>
+                  <TextBlock Grid.Column="2" Text="{Binding Ip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5" Margin="0,0,8,0"/>
+                  <ComboBox Grid.Column="3" ItemsSource="{Binding Choices}" SelectedItem="{Binding Choice}" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="0,0,8,0" AutomationProperties.Name="账号">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:BastionChoice">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <c:StrokeIcon Data="{StaticResource Icon.Key}" Width="11" Height="11" Brush="{DynamicResource St.Accent}" IsVisible="{Binding IsSaved}" VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Button Classes="connect" Content="SSH" Command="{Binding SshCommand}" IsEnabled="{Binding Owner.IsIdle}" ToolTip.Tip="在 Forterm 里打开终端（双击这一行也可以）" AutomationProperties.Name="SSH"/>
+                    <Button Classes="tool" Content="SFTP" Command="{Binding SftpCommand}" IsEnabled="{Binding Owner.IsIdle}" ToolTip.Tip="在 Forterm 里打开文件会话" AutomationProperties.Name="SFTP"/>
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <StackPanel IsVisible="{Binding Current.ShowNoAssets, FallbackValue=False}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="0,0,0,60">
+            <c:StrokeIcon Data="{StaticResource Icon.Search}" Width="30" Height="30" Thickness="1.5" HorizontalAlignment="Center" Opacity="0.5"/>
+            <TextBlock Text="{Binding Current.NoAssetsText, FallbackValue=''}" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </Panel>
+      </DockPanel>
+    </Panel>
+  </Grid>
+</UserControl>

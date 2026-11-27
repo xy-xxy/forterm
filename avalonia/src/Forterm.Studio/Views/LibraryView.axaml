@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Forterm.Studio.ViewModels"
              xmlns:c="using:Forterm.Studio.Controls"
+             xmlns:v="using:Forterm.Studio.Views"
              x:Class="Forterm.Studio.Views.LibraryView"
              x:DataType="vm:LibraryViewModel">
   <UserControl.Styles>
@@ -139,6 +140,10 @@
     </Border>
 
     <Panel>
+    <!-- 堡垒机 tab -->
+    <Panel IsVisible="{Binding IsBastionTab}">
+      <v:BastionHubView DataContext="{Binding Bastions}"/>
+    </Panel>
     <!-- 隧道 tab -->
     <Panel IsVisible="{Binding IsTunnelTab}">
     <DockPanel DataContext="{Binding Tunnels}" x:DataType="vm:TunnelsViewModel" Margin="14,10,14,0">

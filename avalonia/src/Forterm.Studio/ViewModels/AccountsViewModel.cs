@@ -35,13 +35,13 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     Choice editAlgorithm = Algorithms[0], editDigits = DigitChoices[0];
     string? editingId;
 
-    readonly Func<Services.Bastion.FortTicket, bool, string, Task>? open;
+    readonly Action<BastionAccount>? logIn;
 
-    /// <param name="open">Opens a session with a ticket of the portal (see <see cref="BastionAssetsViewModel"/>).</param>
+    /// <param name="logIn">"登录堡垒机": shows the account in the library's "堡垒机" tab and logs in there.</param>
     public AccountsViewModel(AccountStore store, CredentialStore credentials, IStudioInteraction ui, Func<DateTimeOffset>? clock = null, bool startTimer = true,
-        Func<Services.Bastion.FortTicket, bool, string, Task>? open = null)
+        Action<BastionAccount>? logIn = null)
     {
-        this.open = open;
+        this.logIn = logIn;
         this.store = store;
         this.credentials = credentials;
         this.ui = ui;
@@ -59,9 +59,9 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
         OpenPortalCommand = new AsyncCommand(() => selected is { PortalUrl.Length: > 0 } a ? ui.OpenUrlAsync(a.PortalUrl) : Task.CompletedTask);
         LoginCommand = new RelayCommand(() =>
         {
-            if (selected is not { } a || this.open == null) return;
+            if (selected is not { } a || this.logIn == null) return;
             if (a.TenantName.Length == 0 || !a.PortalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) { Error = "登录堡垒机需要 https:// 门户地址和租户名称，请先编辑账户"; return; }
-            ui.ShowBastion(new BastionAssetsViewModel(a, store, credentials, ui, this.open));
+            this.logIn(a);
         });
         ToggleRevealCommand = new RelayCommand(() => { Reveal = !Reveal; Tick(); });
         if (startTimer)
@@ -124,13 +124,18 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     public ICommand CopyPasswordCommand { get; }
     public ICommand CopyCodeCommand { get; }
     public ICommand OpenPortalCommand { get; }
-    /// <summary>"登录堡垒机": the account's fort portal, without a browser.</summary>
+    /// <summary>"登录堡垒机": the account's fort portal, without a browser, in the library's "堡垒机" tab.</summary>
     public ICommand LoginCommand { get; }
-    public bool CanLogIn => open != null;
+    public bool CanLogIn => logIn != null;
     public ICommand ToggleRevealCommand { get; }
 
     void Reload()
     {
+        var next = store.Accounts.OrderBy(a => a.Name, StringComparer.CurrentCulture).ToList();
+        // Only what the "堡垒机" tab keeps changed (a machine's choice, a target login): nothing here shows it, and a
+        // revealed code stays revealed.
+        if (next.Count == Accounts.Count && next.Zip(Accounts).All(p => p.First.Id == p.Second.Id && (p.First with { Choices = p.Second.Choices, Logins = p.Second.Logins }) == p.Second))
+            return;
         string? keep = selected?.Id;
         Accounts.Clear();
         foreach (var a in store.Accounts.OrderBy(a => a.Name, StringComparer.CurrentCulture)) Accounts.Add(a);
@@ -206,10 +211,10 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
 
     void ClearEditSecrets() { EditPassword = ""; EditSeed = ""; }
 
-    /// <summary>Secrets go to the OS credential store first; the metadata is written after.</summary>
     static bool SamePortal(string a, string b) =>
         Uri.TryCreate(a, UriKind.Absolute, out var x) && Uri.TryCreate(b, UriKind.Absolute, out var y) && x.Scheme == y.Scheme && string.Equals(x.Host, y.Host, StringComparison.OrdinalIgnoreCase) && x.Port == y.Port;
 
+    /// <summary>Secrets go to the OS credential store first; the metadata is written after.</summary>
     async Task SaveAsync()
     {
         Error = "";
@@ -245,6 +250,13 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
             else if (existing?.HasPassword == true && ClearPassword) await credentials.ForgetAccountSecretAsync(account.Id, PasswordKind, CancellationToken.None);
             if (newSeed != null) await credentials.SaveAccountSecretAsync(account.Id, SeedKind, Totp.EncodeBase32(newSeed), CancellationToken.None);
             else if (existing?.HasSeed == true && ClearSeed) await credentials.ForgetAccountSecretAsync(account.Id, SeedKind, CancellationToken.None);
+            // What the "堡垒机" tab kept meanwhile (target logins, choices, a certificate just trusted) stays.
+            if (existing != null && store.Find(account.Id) is { } latest)
+            {
+                bool same = SamePortal(latest.PortalUrl, account.PortalUrl);
+                // Another portal: its machines are others; what was chosen for the old ones goes (the logins stay, chosen anew).
+                account = account with { Logins = latest.Logins, Choices = same ? latest.Choices : new Dictionary<string, string>(), CertificatePin = same ? latest.CertificatePin : "" };
+            }
             store.Upsert(account);
             IsEditing = false;
             ClearEditSecrets();
@@ -261,9 +273,10 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     async Task DeleteAsync()
     {
         if (selected is not { } a) return;
-        if (!await ui.ConfirmAsync("删除账户", $"删除“{a.Name}”？已保存的密码和验证器密钥也会从系统凭据中移除。", "删除", danger: true)) return;
+        if (!await ui.ConfirmAsync("删除账户", $"删除“{a.Name}”？已保存的密码、验证器密钥和目标主机凭据也会从系统凭据中移除。", "删除", danger: true)) return;
         await credentials.ForgetAccountSecretAsync(a.Id, PasswordKind, CancellationToken.None);
         await credentials.ForgetAccountSecretAsync(a.Id, SeedKind, CancellationToken.None);
+        foreach (var login in store.Find(a.Id)?.Logins ?? a.Logins) await credentials.ForgetAccountSecretAsync(login.Id, BastionLogin.SecretKind, CancellationToken.None);
         store.Remove(a.Id);
     }
 

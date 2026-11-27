@@ -92,14 +92,6 @@ public sealed class DialogInteraction(Func<Window?> owner) : IStudioInteraction
             await window.Launcher.LaunchUriAsync(uri);
     });
 
-    public void ShowBastion(BastionAssetsViewModel assets) => Dispatcher.UIThread.Post(() =>
-    {
-        var window = new Views.BastionAssetsWindow { DataContext = assets };
-        window.Closed += (_, _) => assets.Dispose();
-        if (owner() is { } o) window.Show(o); else window.Show();
-        assets.LoginCommand.Execute(null);
-    });
-
     public void ShowAccounts(AccountsViewModel accounts) => Dispatcher.UIThread.Post(() =>
     {
         var window = new Views.AccountsWindow { DataContext = accounts };

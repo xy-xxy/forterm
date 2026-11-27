@@ -32,7 +32,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         connector = new ProfileConnector(library, credentials, knownHosts, interaction);
         Home = new LibraryViewModel(library, credentials, connector, interaction, OpenProfileAsync);
         Home.Tunnels = new TunnelsViewModel(library, connector, interaction);
-        Home.AccountsCommand = new RelayCommand(() => interaction.ShowAccounts(new AccountsViewModel(Accounts, credentials, interaction, open: OpenBastionTicketAsync)));
+        Bastions = new BastionHubViewModel(Accounts, credentials, interaction, OpenBastionTicketAsync);
+        AccountsViewModel Manage() => new(Accounts, credentials, interaction, logIn: ShowBastion);
+        Home.AccountsCommand = new RelayCommand(() => interaction.ShowAccounts(Manage()));
+        Bastions.ManageCommand = Home.AccountsCommand;
+        Bastions.AddCommand = new RelayCommand(() => { var accounts = Manage(); interaction.ShowAccounts(accounts); accounts.AddCommand.Execute(null); });
+        Home.Bastions = Bastions;
         Home.UseLiveInfo(id => Workspaces.Where(w => w.ProfileId == id && w.IsConnected).Select(w => w.Monitor?.Summary).FirstOrDefault(s => s != null));
         selected = Home;
         ShowHomeCommand = new RelayCommand(() => Selected = Home);
@@ -55,6 +60,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     internal void IdleTick() { foreach (var w in Workspaces.ToArray()) w.IdleTick(); }
 
     public ToastCenter Toasts { get; } = new();
+    /// <summary>The "堡垒机" tab of the library.</summary>
+    public BastionHubViewModel Bastions { get; }
+
+    /// <summary>"登录堡垒机" of an account: the library's "堡垒机" tab, with that account, logging in.</summary>
+    void ShowBastion(Library.BastionAccount account)
+    {
+        Selected = Home;
+        Home.ShowBastions();
+        Bastions.LogIn(account.Id);
+    }
     /// <summary>The entries for the controller, and what came through them.</summary>
     public ControllerAccess Access { get; init; } = new();
     public PaletteViewModel Palette { get; }
@@ -225,20 +240,40 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand DismissNoticeCommand { get; }
     public ICommand OpenSettingsCommand { get; }
 
-    /// <summary>Handles one controller launch. Rejected arguments are reported, never
-    /// ignored-and-continued; the password is cleared once the workspace has used it.</summary>
-    /// <summary>A session the fort portal handed out ("堡垒机资产"): opened exactly as the vendor's client starts Xshell or
-    /// Xftp for it, through the controller's own path — the sid as the user, two apostrophes as the password.</summary>
-    internal async Task OpenBastionTicketAsync(Services.Bastion.FortTicket ticket, bool files, string title)
+    /// <summary>A session the fort portal handed out ("堡垒机"): opened exactly as the vendor's client starts Xshell or
+    /// Xftp for it, through the controller's own path — the sid as the user, two apostrophes as the password. Says what
+    /// came of it as soon as the part asked for is there (the terminal for SSH, the files for SFTP), or connecting has
+    /// ended: the rest (a file channel that a bastion leaves unanswered on a terminal route) goes on in the session.</summary>
+    internal async Task<string> OpenBastionTicketAsync(Services.Bastion.FortTicket ticket, bool files, string title)
     {
         string host = ticket.Host.Contains(':') ? "[" + ticket.Host + "]" : ticket.Host;
         string url = (files ? "sftp" : "ssh") + "://" + ticket.Sid + ":''@" + host + ":" + ticket.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var plan = LaunchPlan.Parse(files ? ["--entry=xftp", "-newtab", title, "-url", url] : ["--entry=xshell", "-newtab", title, "-url", url]);
         if (plan.Error.Length > 0 || plan.Connection == null) throw new Services.Bastion.FortPortalException("堡垒机给出的会话无法打开：" + plan.Error);
-        if (await AcceptLaunchAsync(plan) == null) throw new Services.Bastion.FortPortalException("会话没有打开");
+        var added = new TaskCompletionSource<WorkspaceViewModel>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var launch = AcceptLaunchAsync(plan, w => added.TrySetResult(w));
+        if (await Task.WhenAny((Task)added.Task, launch) == launch && !added.Task.IsCompleted)
+        {
+            await launch;
+            throw new Services.Bastion.FortPortalException("会话没有打开");
+        }
+        var workspace = added.Task.Result;
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Check(object? sender, System.ComponentModel.PropertyChangedEventArgs? e) { if (files ? workspace.HasFiles : workspace.HasShell) ready.TrySetResult(); }
+        workspace.PropertyChanged += Check;
+        try { Check(null, null); await Task.WhenAny(ready.Task, launch); }
+        finally { workspace.PropertyChanged -= Check; }
+        string what = files ? "SFTP" : "SSH";
+        if (!Workspaces.Contains(workspace)) return $"{title}（{what}）的会话已关闭";
+        return ready.Task.IsCompleted ? $"已打开 {title}（{what}）"
+            : workspace.IsConnected ? $"已连上 {title}（{what}），但{(files ? "文件" : "终端")}没有打开，原因见会话底部"
+            : $"{title}（{what}）没有连上，原因见会话底部";
     }
 
-    public async Task<WorkspaceViewModel?> AcceptLaunchAsync(LaunchPlan plan)
+    /// <summary>Handles one controller launch. Rejected arguments are reported, never
+    /// ignored-and-continued; the password is cleared once the workspace has used it.
+    /// <paramref name="added"/> is told of the workspace as soon as it is there, before it connects.</summary>
+    public async Task<WorkspaceViewModel?> AcceptLaunchAsync(LaunchPlan plan, Action<WorkspaceViewModel>? added = null)
     {
         var wake = plan.Entry is "xshell" or "xftp" && !plan.Diagnose ? Access.Began(plan.Entry, DateTimeOffset.Now) : null;
         if (plan.Error.Length > 0)
@@ -255,6 +290,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         var workspace = WorkspaceViewModel.ForLaunch(LaunchRouter.Route(connection), connection, interaction, knownHosts, options);
         Add(workspace);
+        added?.Invoke(workspace);
         try { await workspace.ConnectAsync(connection); }
         finally
         {
@@ -311,6 +347,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Closing the window: anything that would be lost (drafts, transfers, running tunnels)
     /// is confirmed first; transfers then get a bounded chance to clean up.</summary>
     public bool NeedsCloseConfirmation => Workspaces.Any(w => w.NeedsCloseConfirmation) || Home.Tunnels?.RunningCount > 0;
+    /// <summary>Closing has something to do first: confirmations, or bastion logins to leave (which asks nothing).</summary>
+    public bool NeedsCloseWork => NeedsCloseConfirmation || Bastions.HasLogins;
 
     public async Task<bool> ConfirmCloseAllAsync()
     {
@@ -323,7 +361,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (Home.Tunnels is { RunningCount: > 0 } tunnels &&
             !await interaction.ConfirmAsync("关闭窗口？", $"{tunnels.RunningCount} 个隧道正在运行，关闭窗口会停止它们。", "关闭", danger: false)) return false;
         var deadline = TimeSpan.FromSeconds(5);
-        await Task.WhenAll(Workspaces.ToList().Select(w => w.DrainTransfersAsync(deadline)));
+        await Task.WhenAll(Workspaces.ToList().Select(w => w.DrainTransfersAsync(deadline)).Append(Bastions.LeaveAllAsync(TimeSpan.FromSeconds(3))));
         return true;
     }
 
@@ -344,6 +382,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         idle.Stop();
         Home.Tunnels?.Dispose();
+        Bastions.Dispose();
         Home.Dispose();
         foreach (var workspace in Workspaces) workspace.EndRecordings();
         foreach (var workspace in Workspaces.ToArray()) workspace.Dispose();

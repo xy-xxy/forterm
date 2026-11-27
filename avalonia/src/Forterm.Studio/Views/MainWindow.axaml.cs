@@ -173,7 +173,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
             if (quitting) { IsClosing = true; return; }
-            if (closeConfirmed || DataContext is not MainWindowViewModel vm || !vm.NeedsCloseConfirmation) { IsClosing = true; return; }
+            if (closeConfirmed || DataContext is not MainWindowViewModel vm || !vm.NeedsCloseWork) { IsClosing = true; return; }
             e.Cancel = true;
             if (IsClosing) return; // a confirmation (or the transfer drain) is already in progress
             IsClosing = true;      // new controller launches go to another window meanwhile

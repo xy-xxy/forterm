@@ -646,6 +646,9 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         if (session.CloseReason is { } reason) OnTransportFault(reason);
         if (ShowTerminal && firstTerminal != null) await OpenShellAsync(firstTerminal);
         if (disposed != 0 || IsLost()) return;
+        // The file channel may take its time (a bastion was seen to leave it unanswered on a terminal route): what is
+        // already there is said meanwhile, instead of "正在连接".
+        Status = HasShell ? "终端已打开，正在打开文件通道…" : "已登录，正在打开文件通道…";
         await OpenFilesAsync(ct);
         if (disposed != 0 || IsLost()) return;
         Status = (HasShell, sftp) switch

@@ -50,9 +50,6 @@ public interface IStudioInteraction
 
     void ShowAccounts(AccountsViewModel accounts);
 
-    /// <summary>"堡垒机资产" of an account (non-modal). The window disposes the model when closed.</summary>
-    void ShowBastion(BastionAssetsViewModel assets);
-
     /// <summary>Opens the settings window (non-modal). The window disposes the model when closed.</summary>
     void ShowSettings(SettingsViewModel settings);
 
