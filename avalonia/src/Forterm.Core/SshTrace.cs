@@ -121,12 +121,19 @@ public sealed partial class SshTrace : ILoggerFactory
         }
     }
 
-    string Step => !loggedIn ? "登录完成之前，"
+    /// <summary>When this program last asked for a command on a channel of its own (exec); -1: never.</summary>
+    long execAt = -1;
+    /// <summary>Some bastions end the whole connection when a command is asked for (monitor, compress, sudo): said so
+    /// when the end came within 3 s of one.</summary>
+    string? AfterCommand => loggedIn && execAt >= 0 && endedAt >= execAt && endedAt - execAt <= 3000
+        ? $"本程序在这个连接上执行命令（读取监控、压缩、sudo 等）{(endedAt - execAt) / 1000.0:0.0} 秒后，" : null;
+
+    string Step => AfterCommand ?? (!loggedIn ? "登录完成之前，"
         : !asked ? "登录已通过，还没有请求打开通道，"
         : !opened && refused ? "登录已通过，服务器拒绝打开通道后，"
         : !opened ? "登录已通过，请求打开第一条通道时，"
         : !served ? "登录已通过，通道已打开，请求终端或文件服务时，"
-        : data ? "" : "登录已通过，终端或文件服务刚打开时，";
+        : data ? "" : "登录已通过，终端或文件服务刚打开时，");
 
     void OnBanner(string text)
     {
@@ -261,6 +268,7 @@ public sealed partial class SshTrace : ILoggerFactory
                 case "SSH_MSG_CHANNEL_OPEN_FAILURE": refused |= !sent; break;
                 case "SSH_MSG_CHANNEL_SUCCESS": served |= !sent; break;
                 case "SSH_MSG_CHANNEL_DATA": data |= !sent; break;
+                case "SSH_MSG_CHANNEL_REQUEST" when sent && detail.Said == "exec": execAt = Now; break;
             }
             if (contents) Add("↔ 通道数据");
             else Add((sent ? "→ " : "← ") + name.Replace("SSH_MSG_", "") + "(" + number + ")" + (detail.Text ?? "").Replace(" 通道#", sent ? " 对方通道" : " 本方通道"), detail.Said ?? "", detail.Tail ?? "");

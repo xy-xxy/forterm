@@ -26,6 +26,8 @@ public sealed class FileActions(IRemoteFileSource source, TransferQueue queue, I
     /// <summary>Target of "下载到桌面" (tests point it at a temporary folder).</summary>
     public string DesktopDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
     public IRemoteFileSource Source => source;
+    /// <summary>Asked before a command channel is opened on the connection (see <see cref="CommandChannels"/>).</summary>
+    public CommandChannels? Commands { get; set; }
     /// <summary>sudo needs the file view and the exec channel on the same authenticated SSH transport.</summary>
     public bool SudoAvailable => source is SftpLease { SupportsSameSshExec: true };
 
@@ -498,6 +500,8 @@ public sealed class FileActions(IRemoteFileSource source, TransferQueue queue, I
     async Task<bool> ChangePermissionsWithSudoAsync(FileNodeViewModel node, PermissionPlan plan, uint mode, CancellationToken ct)
     {
         if (!SudoAvailable) throw new NotSupportedException("sudo 只用于经 SSH 的 SFTP 文件区");
+        // Reading the items' identities is already a command.
+        if (Commands is { } commands && !await commands.AllowAsync("sudo 修改权限", "核对文件和 sudo 的命令")) return false;
         var approved = await privileged.InspectAsync(plan, ct);
         int count = plan.Items.Count(i => !i.Skip);
         var notes = approved.Notes.Take(6).Select(n => "· " + n).ToList();
@@ -505,7 +509,7 @@ public sealed class FileActions(IRemoteFileSource source, TransferQueue queue, I
         string message = $"{node.Path}\n以 root 身份设为 {Octal(mode)}，共 {count} 项。\n{string.Join("\n", notes)}\n\n" +
                          "确认这台 SSH 服务器上的路径就是文件区看到的同一文件系统。逐项复核身份与权限，发现变化即停止，已完成的不回滚。";
         if (!await ui.ConfirmAsync("sudo 修改权限", message, "以 sudo 修改", danger: true)) return false;
-        Enqueue(TransferKind.Operation, node.Name + " · sudo 权限 " + Octal(mode), node.ParentPath, (p, t) => privileged.ApplyAsync(approved, true, AskSudoPasswordAsync, p, t), node.ParentPath);
+        Enqueue(TransferKind.Operation, node.Name + " · sudo 权限 " + Octal(mode), node.ParentPath, (p, t) => { Commands?.Opening(); return privileged.ApplyAsync(approved, true, AskSudoPasswordAsync, p, t); }, node.ParentPath);
         return true;
     }
 
@@ -539,11 +543,13 @@ public sealed class FileActions(IRemoteFileSource source, TransferQueue queue, I
         string archive = ValidName(node.Name + ".tar.gz");
         if (await ExistsAsync(node.ParentPath, archive, ct)) throw new IOException($"{Join(node.ParentPath, archive)} 已存在；为避免覆盖，请先改名或删除");
         if (!await ui.ConfirmAsync("压缩", $"在服务器上用 tar 把 {node.Path} 打包为 {Join(node.ParentPath, archive)}。\n使用独立的命令通道执行，不会在终端里输入；符号链接按链接本身打包。", "压缩", danger: false)) return false;
+        if (Commands is { } commands && !await commands.AllowAsync("压缩", "tar 打包命令")) return false;
         string command = $"cd -- {Quote(node.ParentPath)} && set -C && exec 3> {Quote(archive)} && {{ tar -czf - -- {Quote(node.Name)} >&3 || {{ s=$?; rm -f -- {Quote(archive)}; exit $s; }}; }}";
         var session = shell;
         Enqueue(TransferKind.Operation, archive + " · 压缩", node.ParentPath, async (progress, t) =>
         {
             progress.Report(new(0, null, "服务器打包中"));
+            Commands?.Opening();
             var result = await session.ExecAsync(command, TimeSpan.FromMinutes(10), t, 256 * 1024);
             if (result.ExitStatus != 0) throw new IOException("tar 失败：" + WorkspaceViewModel.Short(result.Error.Trim().Length > 0 ? result.Error.Trim() : "退出码 " + result.ExitStatus));
         }, node.ParentPath);

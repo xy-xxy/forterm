@@ -48,6 +48,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     readonly IStudioInteraction interaction;
     readonly KnownHosts knownHosts;
     readonly SessionConnectOptions options;
+    readonly CommandChannels? commands;
     internal SessionConnectOptions ConnectOptions => options;
     readonly SessionSettings settings;
     /// <summary>What is said to the server while it connects and opens its channels (SSH only).</summary>
@@ -94,6 +95,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         this.settings = settings ?? new SessionSettings();
         this.profile = profile;
         this.connector = connector;
+        // Command channels (monitor, compress, sudo) of an SSH connection: asked about first where a bastion may end it.
+        if (kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp) commands = new CommandChannels(interaction, launched: profile == null, host, port, knownHosts.StoreDirectory);
         firstTerminalLifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         InitTerminalCommands();
         if (kind != WorkspaceKind.Ftp) firstTerminal = AddTab();
@@ -130,7 +133,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             // Saved connections refresh automatically while the column is visible. Controller
             // launches (bastion sessions) start manual: every probe is an exec the bastion may audit.
             // "禁止列表监控开启" also keeps the column manual for a saved connection.
-            Monitor = new MonitorViewModel(host, () => session, autoRefresh: profile is { DisableListMonitor: false });
+            Monitor = new MonitorViewModel(host, () => session, autoRefresh: profile is { DisableListMonitor: false }) { Commands = commands };
             Monitor.ShowProcessesCommand = new RelayCommand(p => interaction.ShowProcesses(new ProcessListViewModel(Monitor, () => session, interaction) { Search = p as string ?? "" }));
             Monitor.CopyText = interaction.CopyTextAsync;
         }
@@ -808,10 +811,19 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         catch (Exception e) { if (!transportEnded) FileMessage = "文件通道不可用：" + Short(SshErrors.Explain(e), MostReason); }
     }
 
-    void UseFileSource(IRemoteFileSource source, DirectoryLister list)
+    void UseFileSource(IRemoteFileSource source, DirectoryLister given)
     {
+        // A stopped file channel answers nothing: say so at once instead of waiting for a listing to time out.
+        DirectoryLister list = (path, refresh, token) => source.Closed.IsCancellationRequested ? throw new IOException("文件通道已停止") : given(path, refresh, token);
         lister = list;
-        actions = new FileActions(source, queue!, interaction, list, path => Dispatcher.UIThread.Post(() => _ = ReloadDirectoryAsync(path)), Title, session);
+        source.Closed.Register(() => Dispatcher.UIThread.Post(() =>
+        {
+            // Not with the workspace or the whole connection (those say so themselves): typically stopped on purpose after
+            // an operation whose answer did not come. The tree no longer changes, and the user is to know why.
+            if (disposed == 0 && !transportEnded && session?.IsConnected != false && ReferenceEquals(actions?.Source, source))
+                FileNotice = "文件通道已停止，文件列表不再更新。如果是刚才的文件操作没有得到服务器的确认，请核对它的结果；还要操作文件时，请从控制器重新打开会话。";
+        }));
+        actions = new FileActions(source, queue!, interaction, list, path => Dispatcher.UIThread.Post(() => _ = ReloadDirectoryAsync(path)), Title, session) { Commands = commands };
         actions.Queued += (id, kind) => Transfers?.Register(id, kind);
         Raise(nameof(HasFiles));
         Raise(nameof(OffersLink));
@@ -886,7 +898,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     /// <summary>Lists one directory again after a change (keeps expanded folders).</summary>
     public async Task ReloadDirectoryAsync(string path)
     {
-        if (lister == null || disposed != 0) return;
+        // A stopped file channel answers nothing: the rows stay as they were, and the notice says why.
+        if (lister == null || disposed != 0 || actions?.Source.Closed.IsCancellationRequested == true) return;
         try
         {
             if (path.TrimEnd('/') == rootPath.TrimEnd('/'))
@@ -1050,6 +1063,8 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     {
         if (disposed != 0 || transportEnded) return;
         transportEnded = true;
+        // Right after a command channel: this server is asked about first next time.
+        commands?.ConnectionEnded();
         IsConnected = false;
         firstTerminalLifetime.Cancel();
         Status = "连接已断开：" + Short(message, MostReason).TrimEnd('。') + (profile == null ? "（票据不会重用，请从控制器重新打开）" : "（不会自动重连，请重新发起连接）");

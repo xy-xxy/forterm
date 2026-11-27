@@ -320,9 +320,9 @@ public sealed class MonitorViewModel : ObservableObject, IDisposable
         var ct = cts.Token;
         try
         {
-            await RefreshAsync();
+            await RefreshAsync(byUser: false);
             using var timer = new PeriodicTimer(every);
-            while (await timer.WaitForNextTickAsync(ct)) await RefreshAsync();
+            while (await timer.WaitForNextTickAsync(ct)) await RefreshAsync(byUser: false);
         }
         catch (OperationCanceledException) { }
         finally
@@ -340,14 +340,24 @@ public sealed class MonitorViewModel : ObservableObject, IDisposable
         if (resume && !stalled) Restart();
     }
 
-    /// <summary>One probe; overlapping requests are skipped, not queued. False when it failed.</summary>
-    public async Task<bool> RefreshAsync()
+    /// <summary>Asked before a command channel is opened on the connection (see <see cref="CommandChannels"/>).</summary>
+    public CommandChannels? Commands { get; set; }
+
+    /// <summary>One probe; overlapping requests are skipped, not queued. False when it failed. Not <paramref name="byUser"/>
+    /// (refreshing by itself): nothing is asked, and where a question is due nothing is read.</summary>
+    public async Task<bool> RefreshAsync(bool byUser = true)
     {
         if (session() is not { } ssh) { Message = "监控需要 SSH 会话"; return false; }
         if (Interlocked.Exchange(ref refreshing, 1) != 0) return true;
         IsLoading = true;
         try
         {
+            if (Commands is { } commands && !await commands.AllowAsync("读取监控", "只读命令（读取 /proc、df、ps）", byUser))
+            {
+                Message = byUser ? "没有读取监控" : "这台服务器上次在执行命令后断开了连接，监控没有自动读取；点刷新按钮，确认后读取。";
+                if (!byUser && interval > 0) { loop?.Cancel(); loop = null; IsStalled = true; }
+                return false;
+            }
             var result = await ssh.ExecAsync(MonitorProbe.Command, TimeSpan.FromSeconds(8), lifetime.Token, MonitorProbe.MaxOutputBytes);
             var sample = await Task.Run(() => MonitorProbe.Parse(result.Output));
             first ??= sample;
@@ -618,7 +628,7 @@ public sealed partial class ProcessListViewModel : ObservableObject, IDisposable
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
             while (await timer.WaitForNextTickAsync(ct))
             {
-                if (await monitor.RefreshAsync()) continue;
+                if (await monitor.RefreshAsync(byUser: false)) continue;
                 AutoRefresh = false; // not again by itself, as in the column
                 Notice = monitor.Message;
                 return;
@@ -682,6 +692,7 @@ public sealed partial class ProcessListViewModel : ObservableObject, IDisposable
         if (!await ui.ConfirmAsync(force ? "强制结束进程" : "结束进程", text, force ? "强制结束" : "结束", danger: true)) return;
         string pid = row.Pid.ToString(CultureInfo.InvariantCulture);
         if (!LStart().IsMatch(row.Info.StartRaw)) { Notice = "无法核对进程启动时间，未发送信号"; return; }
+        if (monitor.Commands is { } commands && !await commands.AllowAsync("结束进程", "kill 命令")) { Notice = "没有结束进程"; return; }
         string guard = $"LC_ALL=C; export LC_ALL; set -- $(ps -o lstart= -p {pid} 2>/dev/null); [ \"$*\" = '{row.Info.StartRaw}' ] || exit {StaleProcess}; ";
         var result = await ssh.ExecAsync(guard + $"kill -{(force ? "KILL" : "TERM")} {pid}", TimeSpan.FromSeconds(8), CancellationToken.None, 64 * 1024);
         Notice = result.ExitStatus switch

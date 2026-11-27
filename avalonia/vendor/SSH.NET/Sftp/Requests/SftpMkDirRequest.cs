@@ -58,7 +58,8 @@ namespace Renci.SshNet.Sftp.Requests
         {
             base.SaveData();
             WriteBinaryString(_path);
-            Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS\n            Write(448u); // 0700 at creation, before any contents exist
+            Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS
+            Write(448u); // 0700 at creation, before any contents exist
         }
     }
 }

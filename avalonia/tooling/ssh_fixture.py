@@ -18,7 +18,7 @@ keypath=os.path.join(root.name,'synthetic-user-key.pem')
 os.mkdir(os.path.join(root.name,'a'));os.mkdir(os.path.join(root.name,'b'))
 if algorithm=='ed25519':open(keypath,'wb').write(encoded)
 else:userkey.write_private_key_file(keypath,password='synthetic-phrase' if os.getenv('FIXTURE_KEY_ENCRYPTED')=='1' else None)
-counts={'connections':0,'auth':0,'passwordRequests':0,'keyChecks':0,'openModes':[],'shells':0,'sftp':0,'forwarded':0,'globals':0,'lstats':0,'resizes':[],'resizesDetailed':[],'ptyRequests':[],'frameMarkers':{},'input':[],'sudoPrompts':0,'sudoPasswordBytes':0,'execs':0,'commands':[],'lists':[],'env':[],'negotiated':[],'opens':[],'ptyModes':[]}
+counts={'connections':0,'auth':0,'passwordRequests':0,'keyChecks':0,'openModes':[],'shells':0,'sftp':0,'forwarded':0,'globals':0,'lstats':0,'resizes':[],'resizesDetailed':[],'ptyRequests':[],'frameMarkers':{},'input':[],'sudoPrompts':0,'sudoPasswordBytes':0,'execs':0,'commands':[],'lists':[],'env':[],'negotiated':[],'opens':[],'ptyModes':[],'incomplete':0,'mkdirModes':[]}
 lock=threading.Lock()
 transports=[]
 shell_channels=[]
@@ -158,6 +158,10 @@ class Server(paramiko.ServerInterface):
  def check_channel_exec_request(self,ch,command):
   with lock:counts['execs']+=1;counts['commands'].append(command.decode('utf-8',errors='replace'))
   if os.getenv('FIXTURE_DENY_EXEC')=='1':return False
+  # FIXTURE_EXEC_HANGUP=1: as a bastion seen on 11-27, the command is accepted, and 0.1 s later the whole connection ends
+  # without a word.
+  if os.getenv('FIXTURE_EXEC_HANGUP')=='1':
+   t=ch.get_transport();threading.Timer(0.1,lambda:hang_up(t)).start();return True
   def respond():
    try:
     if os.getenv('FIXTURE_PERMISSION_EXEC')=='1' and b'/usr/bin/python3 -c ' in command:
@@ -269,7 +273,14 @@ class FixtureSFTPServer(paramiko.SFTPServer):
    except OSError as e:self._send_status(request,paramiko.SFTPServer.convert_errno(e.errno))
   else:self._send_status(request,files)
  def _process(self,kind,request,msg):
-  from paramiko.sftp import CMD_REALPATH
+  from paramiko.sftp import CMD_REALPATH,CMD_MKDIR
+  # As OpenSSH's sftp-server: a request shorter than its attributes say is a fatal parse error, and the channel ends
+  # without an answer (paramiko itself would pad it with zeros).
+  if kind==CMD_MKDIR and not complete_attributes(msg):
+   with lock:counts['incomplete']+=1
+   self.sock.close();return
+  # FIXTURE_MKDIR_HANGUP=1: the file channel ends at "新建目录", without an answer (as a server that cannot take it).
+  if kind==CMD_MKDIR and os.getenv('FIXTURE_MKDIR_HANGUP')=='1':self.sock.close();return
   if kind==CMD_REALPATH and (os.getenv('FIXTURE_DENY_REALPATH')=='1' or os.getenv('FIXTURE_UNSUPPORTED_REALPATH')=='1'):
    code=paramiko.SFTP_PERMISSION_DENIED if os.getenv('FIXTURE_DENY_REALPATH')=='1' else paramiko.SFTP_OP_UNSUPPORTED
    self._send_status(request,code);return
@@ -281,6 +292,43 @@ class FixtureSFTPServer(paramiko.SFTPServer):
   if kind!=CMD_INIT:raise IOError('bad init')
   message=paramiko.Message();message.add_int(3);message.add('posix-rename@openssh.com','1');self._send_packet(CMD_VERSION,message)
   return struct.unpack('>I',data[:4])[0]
+def complete_attributes(msg):
+ """A path, then attributes (SFTP v3) whose flags say which fields follow: are they all there?"""
+ at=msg.packet.tell();rest=msg.get_remainder();msg.packet.seek(at)
+ if len(rest)<4:return False
+ i=4+struct.unpack('>I',rest[:4])[0]
+ if len(rest)<i+4:return False
+ flags=struct.unpack('>I',rest[i:i+4])[0];i+=4
+ i+=(8 if flags&1 else 0)+(8 if flags&2 else 0)+(4 if flags&4 else 0)+(8 if flags&8 else 0)
+ return len(rest)>=i
+# FIXTURE_REAL_SFTP=<path of sftp-server>: SFTP is served by OpenSSH's own program, on the real file system (tests use
+# only temporary directories), to see that what the client sends is what a strict server takes.
+class RealSFTP(paramiko.SubsystemHandler):
+ def start_subsystem(self,name,transport,channel):
+  import subprocess
+  p=subprocess.Popen([os.getenv('FIXTURE_REAL_SFTP'),'-e'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+  def up():
+   try:
+    while True:
+     d=channel.recv(32768)
+     if not d:break
+     p.stdin.write(d);p.stdin.flush()
+   except Exception:pass
+   finally:
+    try:p.stdin.close()
+    except Exception:pass
+  threading.Thread(target=up,daemon=True).start()
+  try:
+   while True:
+    d=p.stdout.read1(32768)
+    if not d:break
+    channel.sendall(d)
+  except Exception:pass
+  finally:
+   code=p.wait()
+   with lock:counts['realSftpExit']=code
+   try:channel.close()
+   except Exception:pass
 class Files(paramiko.SFTPServerInterface):
  def local(self,path):
   p=os.path.abspath(os.path.join(os.path.realpath(root.name),path.lstrip('/')))
@@ -318,8 +366,12 @@ class Files(paramiko.SFTPServerInterface):
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def mkdir(self,path,attr):
   try:
-   os.mkdir(self.local(path),((attr.st_mode or 0o700)&0o7777))
-   if emulate:set_mode(self.local(path),attr.st_mode or 0o700)
+   # As OpenSSH: the permissions sent, or 0777 (less the umask) when none are.
+   given=attr._flags&paramiko.SFTPAttributes.FLAG_PERMISSIONS
+   mode=(attr.st_mode&0o7777) if given else 0o777
+   with lock:counts['mkdirModes'].append(mode if given else None)
+   os.mkdir(self.local(path),mode)
+   if emulate:set_mode(self.local(path),mode if given else 0o755)
    return paramiko.SFTP_OK
   except OSError as e:return paramiko.SFTPServer.convert_errno(e.errno)
  def rmdir(self,path):
@@ -351,7 +403,7 @@ def accept():
   except OSError:return
   with lock:counts['connections']+=1
   def handle(s):
-   t=paramiko.Transport(s,default_window_size=int(os.getenv('FIXTURE_WINDOW','2097152')));transports.append(t);t.add_server_key(key);t.set_subsystem_handler('sftp',FixtureSFTPServer,Files)
+   t=paramiko.Transport(s,default_window_size=int(os.getenv('FIXTURE_WINDOW','2097152')));transports.append(t);t.add_server_key(key);t.set_subsystem_handler('sftp',RealSFTP) if os.getenv('FIXTURE_REAL_SFTP') else t.set_subsystem_handler('sftp',FixtureSFTPServer,Files)
    try:
     server=Server();accepted_channels=[];t.start_server(server=server)
     with lock:counts['negotiated'].append({'kex':getattr(t,'fixture_kex',''),'hostKey':t.host_key_type,'cipher':t.remote_cipher})

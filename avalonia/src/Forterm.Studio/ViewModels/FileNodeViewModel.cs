@@ -117,8 +117,16 @@ public sealed class FileNodeViewModel : ObservableObject
             filling?.Invoke();
             Fill();
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            loading = null;
+        }
         catch (OperationCanceledException)
         {
+            // Not the workspace closing: the listing timed out, or the file channel stopped. "加载中…" would stay for ever.
+            filling?.Invoke();
+            Children.Clear();
+            Children.Add(Message("读取没有完成：服务器没有回应，或文件通道已停止；收起再展开可以重试", this));
             loading = null;
         }
         catch (Exception e)

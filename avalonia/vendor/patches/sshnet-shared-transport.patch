@@ -419,12 +419,13 @@
                  return capacity;
              }
          }
-@@ -58,7 +58,7 @@
+@@ -58,7 +58,8 @@
          {
              base.SaveData();
              WriteBinaryString(_path);
 -            Write(0u); // empty attributes
-+            Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS\n            Write(448u); // 0700 at creation, before any contents exist
++            Write(4u); // SSH_FILEXFER_ATTR_PERMISSIONS
++            Write(448u); // 0700 at creation, before any contents exist
          }
      }
  }

@@ -7,6 +7,8 @@ public sealed record HostKeyQuestion(string Endpoint, string? Previous, string C
 public sealed class KnownHosts(string? directory)
 {
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> gates = new();
+    /// <summary>Where it keeps its file; null in memory. (Additive, Studio: other files about servers go next to it.)</summary>
+    public string? StoreDirectory => directory;
     readonly SemaphoreSlim gate = gates.GetOrAdd(directory == null ? "memory" : Path.GetFullPath(directory), _ => new(1, 1));
     static string Key(string host, int port) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(host.Trim().ToLowerInvariant() + ":" + port)));
     Dictionary<string, string> Read() { if (directory == null) return new(); string path = Path.Combine(directory, "known-hosts.json"); if (!File.Exists(path)) return new(); if (new FileInfo(path).Length > 1024 * 1024) throw new IOException("主机指纹库超过1MiB边界"); return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? new(); }

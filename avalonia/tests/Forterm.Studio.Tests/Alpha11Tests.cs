@@ -451,4 +451,54 @@ public sealed class Alpha11Tests
         }
         finally { cancel.Cancel(); second.Close(); window.Close(); AppLock.ForgetForTest(); }
     }
+
+    // ---------- a file channel that stops (a real bastion, 11-27: "创建文件夹失败") ----------
+
+    /// <summary>The server ends the file channel at "新建文件夹" without an answer. The result is not known, so the channel
+    /// stays stopped; the file column says so, and a folder opened afterwards says why it cannot be read instead of
+    /// "加载中…" for ever.</summary>
+    [AvaloniaFact]
+    public async Task AFileChannelThatStopsSaysSo()
+    {
+        using var fixture = LoopbackFixture.Ssh(new Dictionary<string, string> { ["FIXTURE_MKDIR_HANGUP"] = "1" });
+        using var h = new StudioHarness();
+        var window = new MainWindow { Width = 1200, Height = 700, DataContext = h.Model };
+        window.Show();
+        try
+        {
+            var w = (await h.Model.AcceptLaunchAsync(LaunchPlan.Parse(["--entry=xftp", "-url", $"ssh://synthetic:synthetic-only@127.0.0.1:{fixture.Port}"])))!;
+            await Pump(() => w.FileRoots.Any(n => n.IsDirectory), 15);
+            var folder = w.FileRoots.First(n => n.IsDirectory && !n.IsExpanded);
+            h.Interaction.PromptAnswer = "jarpilot-agent";
+            w.NewFolderCommand.Execute(null);
+            await Pump(() => w.FileNotice.Contains("文件通道已停止"), 20);
+            Assert.True(w.FileNotice.Contains("文件通道已停止，文件列表不再更新"), "notice: " + w.FileNotice + " | status: " + w.Status);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            folder.IsExpanded = true;
+            await folder.EnsureLoadedAsync();
+            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), watch.Elapsed.ToString());
+            var said = Assert.Single(folder.Children);
+            Assert.True(said.IsPlaceholder);
+            Assert.Contains("文件通道已停止", said.Name);
+            Assert.DoesNotContain(folder.Children, c => c.Name.StartsWith("加载中", StringComparison.Ordinal));
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>A listing that ends without an answer (not because the workspace closes) is said, not left at "加载中…".</summary>
+    [AvaloniaFact]
+    public async Task AListingWithoutAnAnswerIsSaid()
+    {
+        using var lifetime = new CancellationTokenSource();
+        var node = new FileNodeViewModel(new RemoteEntry("/slow", "slow", true, false, false, 0), (_, _, _) => throw new OperationCanceledException(), lifetime.Token);
+        node.IsExpanded = true;
+        await node.EnsureLoadedAsync();
+        Assert.Contains("读取没有完成", Assert.Single(node.Children).Name);
+        // Closing the workspace is no failure: nothing is said.
+        var closing = new FileNodeViewModel(new RemoteEntry("/c", "c", true, false, false, 0), (_, _, t) => throw new OperationCanceledException(t), lifetime.Token);
+        lifetime.Cancel();
+        closing.IsExpanded = true;
+        await closing.EnsureLoadedAsync();
+        Assert.StartsWith("加载中", Assert.Single(closing.Children).Name);
+    }
 }
