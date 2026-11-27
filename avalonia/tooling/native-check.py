@@ -9,8 +9,10 @@ root = pathlib.Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(); p.add_argument('--app', required=True); p.add_argument('--out', required=True); p.add_argument('--idle', action='store_true')
 # --looks: a background picture, the window 85 % opaque and the terminal tabs below, to see them drawn for real.
 p.add_argument('--looks', action='store_true')
-# --clear: "全局透明度" (the window lets the desktop show through) with blur, and the same tabs below.
+# --clear: "全局透明度" (the window lets the desktop show through), and the same tabs below. Without blur: a Windows VM
+# draws blur as a solid colour (its transparency effects are off), which shows nothing.
 p.add_argument('--clear', action='store_true')
+p.add_argument('--blur', action='store_true')
 a = p.parse_args()
 app, out = pathlib.Path(a.app).resolve(), pathlib.Path(a.out).resolve(); out.mkdir(parents=True, exist_ok=True)
 windows = os.name == 'nt'
@@ -51,7 +53,7 @@ if a.looks:
     (data / 'background-0a1b2c3d.png').write_bytes(picture)
     preferences.update({'BackgroundImage': 'background-0a1b2c3d.png', 'BackgroundStrength': 0.4, 'WindowOpacity': 0.85, 'TabsAtBottom': True})
 if a.clear:
-    preferences.update({'ClearWindow': True, 'ClearWindowBlur': True, 'BackgroundStrength': 0.5, 'TabsAtBottom': True})
+    preferences.update({'ClearWindow': True, 'ClearWindowBlur': a.blur, 'BackgroundStrength': 0.5, 'TabsAtBottom': True})
 (data / 'preferences.json').write_text(json.dumps(preferences))
 def programs():
     if windows: return [l for l in subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Forterm.exe', '/FO', 'CSV', '/NH'], capture_output=True, text=True).stdout.splitlines() if 'Forterm.exe' in l]
