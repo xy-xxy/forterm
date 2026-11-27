@@ -27,7 +27,7 @@
         </Button>
       </Grid>
       <TextBlock DockPanel.Dock="Bottom" Classes="dim" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
-                 Text="仅在本机保存和计算；不访问门户、不自动登录。密码与验证器密钥只在系统凭据中。"/>
+                 Text="保存在本机；只在点“登录堡垒机”时访问门户（https，证书须经你确认）。密码与验证器密钥只在系统凭据中。"/>
       <ListBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="账户列表">
         <ListBox.ItemTemplate>
           <DataTemplate DataType="lib:BastionAccount">
@@ -45,7 +45,7 @@
       <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
         <c:StrokeIcon Data="{StaticResource Icon.Key}" Width="30" Height="30" Opacity="0.5" HorizontalAlignment="Center"/>
         <TextBlock Text="还没有堡垒机账户" HorizontalAlignment="Center" FontWeight="SemiBold"/>
-        <TextBlock Text="保存门户地址、用户名，以及可选的密码和动态验证码（TOTP）密钥。" Classes="dim" FontSize="12" TextWrapping="Wrap" MaxWidth="320" TextAlignment="Center"/>
+        <TextBlock Text="保存门户地址、租户、用户名，以及可选的密码和动态验证码（TOTP）密钥；可以不进浏览器登录堡垒机，打开 SSH / SFTP。" Classes="dim" FontSize="12" TextWrapping="Wrap" MaxWidth="320" TextAlignment="Center"/>
       </StackPanel>
 
       <!-- details -->
@@ -53,22 +53,25 @@
         <StackPanel>
           <Border Classes="card">
             <StackPanel Spacing="10">
-              <Grid ColumnDefinitions="*,Auto,Auto">
+              <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                 <TextBlock Text="{Binding Selected.Name, FallbackValue=''}" Classes="title" FontSize="16" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Classes="secondary" Content="编辑" Command="{Binding EditCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="2" Classes="secondary" Content="删除" Foreground="{DynamicResource St.Danger}" Command="{Binding DeleteCommand}"/>
+                <Button Grid.Column="1" Classes="primary" Content="登录堡垒机" Command="{Binding LoginCommand}" IsVisible="{Binding CanLogIn}" Margin="0,0,8,0" ToolTip.Tip="不经过浏览器登录这个堡垒机，列出资产，在 Forterm 里打开 SSH / SFTP" AutomationProperties.Name="登录堡垒机"/>
+                <Button Grid.Column="2" Classes="secondary" Content="编辑" Command="{Binding EditCommand}" Margin="0,0,8,0"/>
+                <Button Grid.Column="3" Classes="secondary" Content="删除" Foreground="{DynamicResource St.Danger}" Command="{Binding DeleteCommand}"/>
               </Grid>
-              <Grid ColumnDefinitions="70,*,Auto" RowDefinitions="Auto,Auto,Auto" >
+              <Grid ColumnDefinitions="70,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" >
                 <TextBlock Classes="label" Text="门户"/>
                 <TextBlock Grid.Column="1" Text="{Binding Selected.PortalUrl, FallbackValue=''}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                 <Button Grid.Column="2" Classes="flat" Command="{Binding OpenPortalCommand}" ToolTip.Tip="在浏览器打开" AutomationProperties.Name="打开门户"><c:StrokeIcon Data="{StaticResource Icon.Globe}" Width="13" Height="13"/></Button>
-                <TextBlock Grid.Row="1" Classes="label" Text="用户名" Margin="0,6,0,0"/>
-                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Username, FallbackValue=''}" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                <Button Grid.Row="1" Grid.Column="2" Classes="flat" Command="{Binding CopyUserCommand}" ToolTip.Tip="复制用户名" Margin="0,6,0,0"><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></Button>
-                <TextBlock Grid.Row="2" Classes="label" Text="密码" Margin="0,6,0,0"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="已保存在系统凭据（不显示）" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="0,6,0,0" IsVisible="{Binding Selected.HasPassword, FallbackValue=False}"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="未保存" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="0,6,0,0" IsVisible="{Binding !Selected.HasPassword, FallbackValue=True}"/>
-                <Button Grid.Row="2" Grid.Column="2" Classes="flat" Command="{Binding CopyPasswordCommand}" IsVisible="{Binding Selected.HasPassword, FallbackValue=False}" ToolTip.Tip="复制密码（30 秒后从剪贴板清除）" Margin="0,6,0,0"><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></Button>
+                <TextBlock Grid.Row="1" Classes="label" Text="租户" Margin="0,6,0,0" IsVisible="{Binding Selected.TenantName, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.TenantName, FallbackValue=''}" VerticalAlignment="Center" Margin="0,6,0,0" IsVisible="{Binding Selected.TenantName, Converter={x:Static StringConverters.IsNotNullOrEmpty}, FallbackValue=False}"/>
+                <TextBlock Grid.Row="2" Classes="label" Text="用户名" Margin="0,6,0,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Username, FallbackValue=''}" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                <Button Grid.Row="2" Grid.Column="2" Classes="flat" Command="{Binding CopyUserCommand}" ToolTip.Tip="复制用户名" Margin="0,6,0,0"><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></Button>
+                <TextBlock Grid.Row="3" Classes="label" Text="密码" Margin="0,6,0,0"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="已保存在系统凭据（不显示）" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="0,6,0,0" IsVisible="{Binding Selected.HasPassword, FallbackValue=False}"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="未保存" Classes="dim" FontSize="12" VerticalAlignment="Center" Margin="0,6,0,0" IsVisible="{Binding !Selected.HasPassword, FallbackValue=True}"/>
+                <Button Grid.Row="3" Grid.Column="2" Classes="flat" Command="{Binding CopyPasswordCommand}" IsVisible="{Binding Selected.HasPassword, FallbackValue=False}" ToolTip.Tip="复制密码（30 秒后从剪贴板清除）" Margin="0,6,0,0"><c:StrokeIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/></Button>
               </Grid>
             </StackPanel>
           </Border>
@@ -94,32 +97,34 @@
         <Border Classes="card">
           <StackPanel Spacing="9">
             <TextBlock Text="{Binding EditTitle}" Classes="title"/>
-            <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
               <TextBlock Classes="label" Text="名称"/>
               <TextBox Grid.Column="1" Text="{Binding EditName}" AutomationProperties.Name="账户名称"/>
               <TextBlock Grid.Row="1" Classes="label" Text="门户地址" Margin="0,8,0,0"/>
               <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EditUrl}" PlaceholderText="https://bastion.example" Margin="0,8,0,0" AutomationProperties.Name="门户地址"/>
-              <TextBlock Grid.Row="2" Classes="label" Text="用户名" Margin="0,8,0,0"/>
-              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding EditUser}" Margin="0,8,0,0" AutomationProperties.Name="用户名"/>
-              <TextBlock Grid.Row="3" Classes="label" Text="密码" Margin="0,8,0,0"/>
-              <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Spacing="4">
+              <TextBlock Grid.Row="2" Classes="label" Text="租户" Margin="0,8,0,0"/>
+              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding EditTenant}" PlaceholderText="堡垒机登录页的“租户名称”；不登录堡垒机可留空" Margin="0,8,0,0" AutomationProperties.Name="租户"/>
+              <TextBlock Grid.Row="3" Classes="label" Text="用户名" Margin="0,8,0,0"/>
+              <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding EditUser}" Margin="0,8,0,0" AutomationProperties.Name="用户名"/>
+              <TextBlock Grid.Row="4" Classes="label" Text="密码" Margin="0,8,0,0"/>
+              <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" Spacing="4">
                 <TextBox Text="{Binding EditPassword}" PasswordChar="•" PlaceholderText="留空保持不变" AutomationProperties.Name="账户密码"/>
                 <CheckBox Content="清除已保存的密码" IsChecked="{Binding ClearPassword}" IsVisible="{Binding EditingHasPassword}" FontSize="12"/>
               </StackPanel>
-              <TextBlock Grid.Row="4" Classes="label" Text="验证器密钥" Margin="0,8,0,0"/>
-              <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" Spacing="4">
+              <TextBlock Grid.Row="5" Classes="label" Text="验证器密钥" Margin="0,8,0,0"/>
+              <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" Spacing="4">
                 <TextBox Text="{Binding EditSeed}" PasswordChar="•" PlaceholderText="Base32 密钥或 otpauth://totp/… ；留空保持不变" AutomationProperties.Name="验证器密钥"/>
                 <CheckBox Content="清除已保存的验证器密钥" IsChecked="{Binding ClearSeed}" IsVisible="{Binding EditingHasSeed}" FontSize="12"/>
               </StackPanel>
-              <TextBlock Grid.Row="5" Classes="label" Text="算法 / 位数" Margin="0,8,0,0"/>
-              <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+              <TextBlock Grid.Row="6" Classes="label" Text="算法 / 位数" Margin="0,8,0,0"/>
+              <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                 <ComboBox ItemsSource="{Binding AlgorithmChoices}" SelectedItem="{Binding EditAlgorithm}" MinWidth="110"/>
                 <ComboBox ItemsSource="{Binding Digits}" SelectedItem="{Binding EditDigits}" MinWidth="90"/>
               </StackPanel>
-              <TextBlock Grid.Row="6" Classes="label" Text="周期（秒）" Margin="0,8,0,0"/>
-              <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding EditPeriod}" Width="90" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-              <TextBlock Grid.Row="7" Classes="label" Text="备注" Margin="0,8,0,0"/>
-              <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding EditNote}" Margin="0,8,0,0"/>
+              <TextBlock Grid.Row="7" Classes="label" Text="周期（秒）" Margin="0,8,0,0"/>
+              <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding EditPeriod}" Width="90" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+              <TextBlock Grid.Row="8" Classes="label" Text="备注" Margin="0,8,0,0"/>
+              <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding EditNote}" Margin="0,8,0,0"/>
             </Grid>
             <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource St.Danger}" TextWrapping="Wrap" FontSize="12"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

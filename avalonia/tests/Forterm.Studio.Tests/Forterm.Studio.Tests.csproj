@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
-    <Version>0.4.0-alpha.12</Version>
+    <Version>0.4.0-alpha.13</Version>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Forterm.Studio/Forterm.Studio.csproj" />

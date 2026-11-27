@@ -62,10 +62,11 @@ public sealed class EvidenceRenderTests
     {
         using var h = new StudioHarness();
         var store = new AccountStore(h.Data);
-        var accounts = new AccountsViewModel(store, h.Credentials, h.Interaction, () => DateTimeOffset.FromUnixTimeSeconds(1_700_000_000), startTimer: false);
+        var accounts = new AccountsViewModel(store, h.Credentials, h.Interaction, () => DateTimeOffset.FromUnixTimeSeconds(1_700_000_000), startTimer: false, open: (_, _, _) => Task.CompletedTask);
         accounts.AddCommand.Execute(null);
         accounts.EditName = "示例堡垒机";
         accounts.EditUrl = "https://bastion.example";
+        accounts.EditTenant = "示例租户";
         accounts.EditUser = "ops";
         accounts.EditPassword = "synthetic";
         accounts.EditSeed = Totp.EncodeBase32(Encoding.ASCII.GetBytes("12345678901234567890"));

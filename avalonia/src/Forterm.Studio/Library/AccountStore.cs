@@ -3,15 +3,19 @@ using Forterm.Core;
 
 namespace Forterm.Studio.Library;
 
-/// <summary>Bastion account (堡垒机账户): portal address and username for reference, with the
-/// password and the authenticator (TOTP) seed kept only in the OS credential store. Studio never
-/// contacts the portal or logs in with these; they are shown and copied on request.</summary>
+/// <summary>Bastion account (堡垒机账户): portal address, tenant and username, with the password and the authenticator
+/// (TOTP) seed kept only in the OS credential store. Shown and copied on request; with a fort portal (alpha.13) also used
+/// to log in without a browser ("登录堡垒机"), its certificate pinned by the SHA-256 the user confirmed.</summary>
 public sealed record BastionAccount
 {
     public string Id { get; init; } = StudioProfile.NewId();
     public string Name { get; init; } = "";
     public string PortalUrl { get; init; } = "";
     public string Username { get; init; } = "";
+    /// <summary>The fort portal's "租户名称"; "" when not used.</summary>
+    public string TenantName { get; init; } = "";
+    /// <summary>SHA-256 (hex) of the portal certificate the user trusted; "" until then.</summary>
+    public string CertificatePin { get; init; } = "";
     public string Note { get; init; } = "";
     public bool HasPassword { get; init; }
     public bool HasSeed { get; init; }
@@ -79,6 +83,8 @@ public sealed class AccountStore
         if (a.Name.Trim().Length is 0 or > 64 || a.Name.Any(char.IsControl)) throw new InvalidDataException("账户名称不能为空，最长 64 个字符");
         if (a.Username.Length > 128 || a.Username.Any(char.IsControl)) throw new InvalidDataException("用户名过长或包含控制字符");
         if (a.Note.Length > 1000) throw new InvalidDataException("备注过长");
+        if (a.TenantName.Length > 128 || a.TenantName.Any(char.IsControl) || a.TenantName.IndexOfAny(['&', '=', '%', '+']) >= 0) throw new InvalidDataException("租户名称过长或包含不允许的字符");
+        if (a.CertificatePin.Length > 0 && (a.CertificatePin.Length != 64 || !a.CertificatePin.All(char.IsAsciiHexDigit))) throw new InvalidDataException("证书指纹无效");
         if (a.PortalUrl.Length > 0)
         {
             if (a.PortalUrl.Length > 2048 || !Uri.TryCreate(a.PortalUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http") || uri.UserInfo.Length > 0)

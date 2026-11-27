@@ -129,4 +129,36 @@ public sealed class Alpha12Tests
         Assert.Equal(key, CommandChannels.Key("bastion.example", 22));
         Assert.NotEqual(key, CommandChannels.Key("bastion.example", 2222));
     }
+
+    /// <summary>The connection report says how the controller filled user and password, never what with: a bastion's own
+    /// client builds the address, and its template is to be learned from it.</summary>
+    [Fact]
+    public void TheLaunchIsDescribedNotQuoted()
+    {
+        string sid = "0f8fad5b-d9cb-469f-a165-70867728950e";
+        Assert.Equal("用户名 36 字（标识）；密码与用户名相同", WorkspaceViewModel.LaunchShape(sid, sid, true));
+        Assert.Equal("用户名 36 字（标识）；密码 8 字，与用户名不同", WorkspaceViewModel.LaunchShape(sid, "a1b2c3d4", true));
+        Assert.Equal("用户名 36 字（标识）；没有密码", WorkspaceViewModel.LaunchShape(sid, "", false));
+        Assert.Equal("用户名 36 字（标识）；密码为空", WorkspaceViewModel.LaunchShape(sid, "", true));
+        Assert.Equal("用户名 4 字（字母和数字）；密码 8 字，包含用户名", WorkspaceViewModel.LaunchShape("root", "root-x!y", true));
+        Assert.DoesNotContain("a1b2", WorkspaceViewModel.LaunchShape(sid, "a1b2c3d4", true));
+    }
+
+    /// <summary>In the report of a controller launch, after the way it was opened.</summary>
+    [AvaloniaFact]
+    public async Task TheReportCarriesTheLaunchShape()
+    {
+        using var fixture = LoopbackFixture.Ssh();
+        using var h = new StudioHarness();
+        var window = new MainWindow { Width = 1200, Height = 700, DataContext = h.Model };
+        window.Show();
+        try
+        {
+            var w = await Launch(h, fixture);
+            string report = w.Report();
+            Assert.Contains("唤醒参数：用户名 9 字（字母和数字）；密码 14 字，包含用户名", report);
+            Assert.DoesNotContain("synthetic-only", report);
+        }
+        finally { window.Close(); }
+    }
 }

@@ -87,6 +87,10 @@ class Server(paramiko.ServerInterface):
   if os.getenv('FIXTURE_AUTH')=='repeat-password':
    if not self.partial and password=='synthetic-only':self.partial=True;return paramiko.AUTH_PARTIALLY_SUCCESSFUL
    return paramiko.AUTH_SUCCESSFUL if self.partial and password=='synthetic-fresh' else paramiko.AUTH_FAILED
+  # FIXTURE_ACCEPT_USER / FIXTURE_ACCEPT_PASSWORD: one more login, as a bastion's SSH service takes a portal's one-time sid.
+  if os.getenv('FIXTURE_ACCEPT_USER') and user==os.getenv('FIXTURE_ACCEPT_USER') and password==os.getenv('FIXTURE_ACCEPT_PASSWORD',''):
+   with lock:counts.setdefault('acceptedUsers',[]).append(user)
+   return paramiko.AUTH_SUCCESSFUL
   if user!='synthetic' or password!='synthetic-only':return paramiko.AUTH_FAILED
   if os.getenv('FIXTURE_AUTH')=='partial':self.partial=True;return paramiko.AUTH_PARTIALLY_SUCCESSFUL
   return paramiko.AUTH_SUCCESSFUL

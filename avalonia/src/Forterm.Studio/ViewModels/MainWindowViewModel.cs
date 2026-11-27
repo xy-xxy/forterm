@@ -32,7 +32,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         connector = new ProfileConnector(library, credentials, knownHosts, interaction);
         Home = new LibraryViewModel(library, credentials, connector, interaction, OpenProfileAsync);
         Home.Tunnels = new TunnelsViewModel(library, connector, interaction);
-        Home.AccountsCommand = new RelayCommand(() => interaction.ShowAccounts(new AccountsViewModel(Accounts, credentials, interaction)));
+        Home.AccountsCommand = new RelayCommand(() => interaction.ShowAccounts(new AccountsViewModel(Accounts, credentials, interaction, open: OpenBastionTicketAsync)));
         Home.UseLiveInfo(id => Workspaces.Where(w => w.ProfileId == id && w.IsConnected).Select(w => w.Monitor?.Summary).FirstOrDefault(s => s != null));
         selected = Home;
         ShowHomeCommand = new RelayCommand(() => Selected = Home);
@@ -227,6 +227,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>Handles one controller launch. Rejected arguments are reported, never
     /// ignored-and-continued; the password is cleared once the workspace has used it.</summary>
+    /// <summary>A session the fort portal handed out ("堡垒机资产"): opened exactly as the vendor's client starts Xshell or
+    /// Xftp for it, through the controller's own path — the sid as the user, two apostrophes as the password.</summary>
+    internal async Task OpenBastionTicketAsync(Services.Bastion.FortTicket ticket, bool files, string title)
+    {
+        string host = ticket.Host.Contains(':') ? "[" + ticket.Host + "]" : ticket.Host;
+        string url = (files ? "sftp" : "ssh") + "://" + ticket.Sid + ":''@" + host + ":" + ticket.Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var plan = LaunchPlan.Parse(files ? ["--entry=xftp", "-newtab", title, "-url", url] : ["--entry=xshell", "-newtab", title, "-url", url]);
+        if (plan.Error.Length > 0 || plan.Connection == null) throw new Services.Bastion.FortPortalException("堡垒机给出的会话无法打开：" + plan.Error);
+        if (await AcceptLaunchAsync(plan) == null) throw new Services.Bastion.FortPortalException("会话没有打开");
+    }
+
     public async Task<WorkspaceViewModel?> AcceptLaunchAsync(LaunchPlan plan)
     {
         var wake = plan.Entry is "xshell" or "xftp" && !plan.Diagnose ? Access.Began(plan.Entry, DateTimeOffset.Now) : null;

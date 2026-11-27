@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Builds the Windows installer of Studio from files that are already published.
 
-  package-studio-windows.py 0.4.0-alpha.12                 from ../release/Forterm-Studio-<ver>-windows-x64.zip
-  package-studio-windows.py 0.4.0-alpha.12 --payload DIR --output FILE [--makensis FILE]   from a folder (CI)
+  package-studio-windows.py 0.4.0-alpha.13                 from ../release/Forterm-Studio-<ver>-windows-x64.zip
+  package-studio-windows.py 0.4.0-alpha.13 --payload DIR --output FILE [--makensis FILE]   from a folder (CI)
 
 Runs no Windows program. Never replaces an existing installer."""
 import argparse, hashlib, json, os, pathlib, shutil, subprocess, sys, tempfile, zipfile

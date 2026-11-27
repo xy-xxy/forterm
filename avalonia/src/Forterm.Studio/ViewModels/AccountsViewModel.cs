@@ -29,14 +29,19 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     byte[]? seed;
     int loadVersion;
     bool reveal, editing;
-    string code = "", remaining = "", error = "", editName = "", editUrl = "", editUser = "", editPassword = "", editSeed = "", editNote = "", editPeriod = "30";
+    string code = "", remaining = "", error = "", editName = "", editUrl = "", editUser = "", editPassword = "", editSeed = "", editNote = "", editPeriod = "30", editTenant = "";
     double progress;
     bool clearPassword, clearSeed;
     Choice editAlgorithm = Algorithms[0], editDigits = DigitChoices[0];
     string? editingId;
 
-    public AccountsViewModel(AccountStore store, CredentialStore credentials, IStudioInteraction ui, Func<DateTimeOffset>? clock = null, bool startTimer = true)
+    readonly Func<Services.Bastion.FortTicket, bool, string, Task>? open;
+
+    /// <param name="open">Opens a session with a ticket of the portal (see <see cref="BastionAssetsViewModel"/>).</param>
+    public AccountsViewModel(AccountStore store, CredentialStore credentials, IStudioInteraction ui, Func<DateTimeOffset>? clock = null, bool startTimer = true,
+        Func<Services.Bastion.FortTicket, bool, string, Task>? open = null)
     {
+        this.open = open;
         this.store = store;
         this.credentials = credentials;
         this.ui = ui;
@@ -52,6 +57,12 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
         CopyPasswordCommand = new AsyncCommand(CopyPasswordAsync, e => Error = WorkspaceViewModel.Short(e.Message));
         CopyCodeCommand = new AsyncCommand(CopyCodeAsync, e => Error = WorkspaceViewModel.Short(e.Message));
         OpenPortalCommand = new AsyncCommand(() => selected is { PortalUrl.Length: > 0 } a ? ui.OpenUrlAsync(a.PortalUrl) : Task.CompletedTask);
+        LoginCommand = new RelayCommand(() =>
+        {
+            if (selected is not { } a || this.open == null) return;
+            if (a.TenantName.Length == 0 || !a.PortalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) { Error = "登录堡垒机需要 https:// 门户地址和租户名称，请先编辑账户"; return; }
+            ui.ShowBastion(new BastionAssetsViewModel(a, store, credentials, ui, this.open));
+        });
         ToggleRevealCommand = new RelayCommand(() => { Reveal = !Reveal; Tick(); });
         if (startTimer)
         {
@@ -89,6 +100,7 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     public string EditTitle => editingId == null ? "添加账户" : "编辑账户";
     public string EditName { get => editName; set => Set(ref editName, value); }
     public string EditUrl { get => editUrl; set => Set(ref editUrl, value); }
+    public string EditTenant { get => editTenant; set => Set(ref editTenant, value); }
     public string EditUser { get => editUser; set => Set(ref editUser, value); }
     public string EditPassword { get => editPassword; set => Set(ref editPassword, value); }
     public string EditSeed { get => editSeed; set => Set(ref editSeed, value); }
@@ -112,6 +124,9 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     public ICommand CopyPasswordCommand { get; }
     public ICommand CopyCodeCommand { get; }
     public ICommand OpenPortalCommand { get; }
+    /// <summary>"登录堡垒机": the account's fort portal, without a browser.</summary>
+    public ICommand LoginCommand { get; }
+    public bool CanLogIn => open != null;
     public ICommand ToggleRevealCommand { get; }
 
     void Reload()
@@ -175,6 +190,7 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
         editingId = account?.Id;
         EditName = account?.Name ?? "";
         EditUrl = account?.PortalUrl ?? "";
+        EditTenant = account?.TenantName ?? "";
         EditUser = account?.Username ?? "";
         EditNote = account?.Note ?? "";
         EditAlgorithm = Algorithms.FirstOrDefault(c => c.Value == account?.Algorithm) ?? Algorithms[0];
@@ -191,6 +207,9 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
     void ClearEditSecrets() { EditPassword = ""; EditSeed = ""; }
 
     /// <summary>Secrets go to the OS credential store first; the metadata is written after.</summary>
+    static bool SamePortal(string a, string b) =>
+        Uri.TryCreate(a, UriKind.Absolute, out var x) && Uri.TryCreate(b, UriKind.Absolute, out var y) && x.Scheme == y.Scheme && string.Equals(x.Host, y.Host, StringComparison.OrdinalIgnoreCase) && x.Port == y.Port;
+
     async Task SaveAsync()
     {
         Error = "";
@@ -210,6 +229,9 @@ public sealed class AccountsViewModel : ObservableObject, IDisposable
             {
                 Name = EditName.Trim(),
                 PortalUrl = EditUrl.Trim(),
+                TenantName = EditTenant.Trim(),
+                // Another portal: the certificate the user trusted was that one's.
+                CertificatePin = existing != null && !SamePortal(existing.PortalUrl, EditUrl.Trim()) ? "" : existing?.CertificatePin ?? "",
                 Username = EditUser.Trim(),
                 Note = EditNote.Trim(),
                 Algorithm = parameters.Algorithm,

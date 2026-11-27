@@ -43,6 +43,12 @@ def text_value(key, value):
     if isinstance(value, (int, float)) and not SENSITIVE.search(key or '') and abs(value) < 1000 and float(value).is_integer(): return str(int(value))
     return kind(value)
 
+def field(name):
+    """A field or parameter name: kept (marked, so that the last guard does not take it for a host name), unless it
+    holds numbers long enough to be somebody's."""
+    name = re.sub(r'\d{6,}', '{数字}', str(name))[:80]
+    return '⟦' + name.replace('⟦', '').replace('⟧', '') + '⟧'
+
 def segment(seg):
     if seg == '': return seg
     s = urllib.parse.unquote(seg)
@@ -63,17 +69,17 @@ def url_shape(url):
         except ValueError: port = ':‹端口›'
         rest = '/'.join(segment(x) for x in u.path.split('/')) if u.path not in ('', '/') else ''
         query = urllib.parse.parse_qsl(u.query, keep_blank_values=True)
-        q = '&'.join(f'{k}={text_value(k, v)}' for k, v in query)
+        q = '&'.join(f'{field(k)}={text_value(k, v)}' for k, v in query)
         return f'{u.scheme}://{user}' + ('‹地址›' if u.hostname else '') + port + rest + (f'?{q}' if q else '')
     path = '/'.join(segment(s) for s in u.path.split('/'))
     query = urllib.parse.parse_qsl(u.query, keep_blank_values=True)
-    q = '&'.join(f'{k}={text_value(k, v)}' for k, v in query)
+    q = '&'.join(f'{field(k)}={text_value(k, v)}' for k, v in query)
     return f'{u.scheme}://{host_name(u.netloc)}{path}' + (f'?{q}' if q else '')
 
 def shape(data, key='', depth=0):
     if depth > 8: return '…'
     if isinstance(data, dict):
-        return {k: shape(v, k, depth + 1) for k, v in list(data.items())[:60]} | ({'…': f'另有 {len(data) - 60} 项'} if len(data) > 60 else {})
+        return {field(k): shape(v, k, depth + 1) for k, v in list(data.items())[:60]} | ({'…': f'另有 {len(data) - 60} 项'} if len(data) > 60 else {})
     if isinstance(data, list):
         if not data: return []
         return [shape(data[0], key, depth + 1)] + ([f'…共 {len(data)} 项'] if len(data) > 1 else [])
@@ -86,7 +92,7 @@ def body_shape(text, mime):
         try: return json.dumps(shape(json.loads(text)), ensure_ascii=False)
         except ValueError: pass
     if 'x-www-form-urlencoded' in mime:
-        return '表单 ' + ', '.join(f'{k}={text_value(k, v)}' for k, v in urllib.parse.parse_qsl(text, keep_blank_values=True))
+        return '表单 ' + ', '.join(f'{field(k)}={text_value(k, v)}' for k, v in urllib.parse.parse_qsl(text, keep_blank_values=True))
     if 'html' in mime:
         forms = re.findall(r'<form[^>]*action=["\']([^"\']*)', text, re.I)
         inputs = re.findall(r'<input[^>]*name=["\']([^"\']+)', text, re.I)
@@ -94,6 +100,10 @@ def body_shape(text, mime):
         return f'HTML {len(text)} 字' + (f'；表单 {len(forms)} 个，输入项 {", ".join(sorted(set(inputs))[:30])}' if forms or inputs else '') + (f'；含启动地址 {", ".join(launch)}' if launch else '')
     found = sorted({m.split(':', 1)[0] for m in re.findall(r'\b(?:xshell|xftp|ssh|sftp|ftp|rdp|vnc|telnet)[a-z]*://[^\s"\'<>]+', text, re.I)})
     return f'{mime or "未知类型"} {len(text)} 字' + (f'；含启动地址 {", ".join(found)}' if found else '')
+
+def cookie_name(name):
+    """Some portals put user or session numbers into the names of their cookies."""
+    return LONG.sub(lambda m: '{编号}' if re.search(r'\d', m.group(0)) else m.group(0), re.sub(r'\d{6,}', '{数字}', name))
 
 def response_text(content):
     text = content.get('text')
@@ -115,15 +125,17 @@ def main(source, target):
         req, res = e['request'], e['response']
         if STATIC.search(req['url']) and res.get('status') in (200, 304): skipped[host_name(urllib.parse.urlsplit(req['url']).netloc)] += 1; continue
         lines = [f'{at(e):>8} ms  {req["method"]} {url_shape(req["url"])}  →  {res.get("status")}']
-        notable = [h['name'] for h in req.get('headers', []) if h['name'].lower() in ('authorization', 'x-csrftoken', 'x-csrf-token', 'x-xsrf-token', 'x-requested-with', 'x-auth-token', 'token', 'x-token', 'x-jms-org')]
+        notable = [h['name'] for h in req.get('headers', []) if 'token' in h['name'].lower() or h['name'].lower() in ('authorization', 'x-requested-with', 'x-jms-org')]
         if notable: lines.append('           请求头（只列名字）：' + ', '.join(sorted(set(notable))))
-        if req.get('cookies'): lines.append('           带的 Cookie：' + ', '.join(sorted({c['name'] for c in req['cookies']})))
+        if req.get('cookies'): lines.append('           带的 Cookie：' + ', '.join(sorted({cookie_name(c['name']) for c in req['cookies']})))
         if (post := req.get('postData')) is not None:
             b = body_shape(post.get('text'), post.get('mimeType'))
-            if b is None and post.get('params'): b = '表单 ' + ', '.join(f'{p["name"]}={text_value(p["name"], p.get("value", ""))}' for p in post['params'])
+            if b is None and post.get('params'): b = '表单 ' + ', '.join(f'{field(p["name"])}={text_value(p["name"], p.get("value", ""))}' for p in post['params'])
             if b: lines.append('           请求体：' + b)
-        cookies = [c['name'] + ('（HttpOnly）' if c.get('httpOnly') else '') for c in res.get('cookies', [])]
+        cookies = [cookie_name(c['name']) + ('（HttpOnly）' if c.get('httpOnly') else '') for c in res.get('cookies', [])]
         if cookies: lines.append('           设置 Cookie：' + ', '.join(cookies))
+        tokens = [h['name'] for h in res.get('headers', []) if 'token' in h['name'].lower()]
+        if tokens: lines.append('           返回头（只列名字）：' + ', '.join(sorted(set(tokens))))
         location = next((h['value'] for h in res.get('headers', []) if h['name'].lower() == 'location'), None)
         if location: lines.append('           跳转到：' + url_shape(urllib.parse.urljoin(req['url'], location)))
         b = body_shape(response_text(res.get('content', {})), res.get('content', {}).get('mimeType'))
@@ -134,7 +146,8 @@ def main(source, target):
     text = '\n'.join(out)
     # Last guard: nothing that looks like an address or a long token leaves.
     text = IPV4.sub('‹地址›', text)
-    text = HOSTISH.sub(lambda m: m.group(0) if m.group(0).lower().endswith(('.js', '.css', '.html')) else '‹主机名›', text)
+    text = re.sub(r'(⟦[^⟧]*⟧)|' + HOSTISH.pattern, lambda m: m.group(1) or (m.group(0) if m.group(0).lower().endswith(('.js', '.css', '.html')) else '‹主机名›'), text)
+    text = text.replace('⟦', '').replace('⟧', '')
     summary = f'请求 {len(out)} 个（另有静态文件 {sum(skipped.values())} 个，没有列出）\n' + text + '\n'
     open(target, 'w', encoding='utf-8').write(summary)
     print(f'已写入 {target}：{len(out)} 个请求')

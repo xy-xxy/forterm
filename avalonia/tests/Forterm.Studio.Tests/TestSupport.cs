@@ -88,6 +88,8 @@ internal sealed class LoopbackFixture : IDisposable
     }
 
     public static LoopbackFixture Ssh(IDictionary<string, string>? environment = null) => new("ssh_fixture.py", environment);
+    /// <summary>A stand-in for a fort bastion portal (HTTPS on 127.0.0.1, a certificate of its own).</summary>
+    public static LoopbackFixture Fort(IDictionary<string, string>? environment = null) => new("fort_portal_fixture.py", environment);
 
     /// <summary>Counters recorded by the fixture (auth, shells, shell input as hex, forwards, TERM).</summary>
     public JsonElement Stats()
@@ -178,6 +180,8 @@ internal sealed class ScriptedInteraction(params string[][] answers) : IStudioIn
     public Task OpenUrlAsync(string url) { OpenedUrls.Add(url); return Task.CompletedTask; }
     public AccountsViewModel? AccountsShown { get; private set; }
     public void ShowAccounts(AccountsViewModel accounts) => AccountsShown = accounts;
+    public BastionAssetsViewModel? BastionShown { get; private set; }
+    public void ShowBastion(BastionAssetsViewModel assets) { BastionShown?.Dispose(); BastionShown = assets; }
     public SettingsViewModel? SettingsShown { get; private set; }
     public void ShowSettings(SettingsViewModel settings) { SettingsShown?.Dispose(); SettingsShown = settings; }
     public List<PasteReview> Pastes { get; } = new();

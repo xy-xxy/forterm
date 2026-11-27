@@ -466,6 +466,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
     {
         if (!BeginConnect()) return;
         string password = connection.Password;
+        launchShape = LaunchShape(connection.User, password, connection.HasPassword);
         var ct = lifetime.Token;
         IsBusy = true;
         try
@@ -597,6 +598,24 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         Raise(nameof(HasServerNotice));
     }
 
+    /// <summary>How the controller's user name and password look, never what they are: which part of the address the
+    /// controller fills with what (a bastion's own client builds it; its template cannot be seen otherwise). Of the
+    /// password only how it relates to the user name and its length.</summary>
+    string launchShape = "";
+
+    internal static string LaunchShape(string user, string password, bool hasPassword)
+    {
+        static string Kind(string s) =>
+            System.Guid.TryParseExact(s, "D", out _) ? "标识" : s.All(char.IsAsciiDigit) ? "数字" : s.All(char.IsAsciiLetterOrDigit) ? "字母和数字" : "含符号";
+        string u = user.Length == 0 ? "没有用户名" : $"用户名 {user.Length} 字（{Kind(user)}）";
+        string p = !hasPassword ? "没有密码" : password.Length == 0 ? "密码为空"
+            : password == user ? $"密码与用户名相同"
+            : string.Equals(password, user, StringComparison.OrdinalIgnoreCase) ? $"密码与用户名只差大小写"
+            : user.Length > 0 && password.Contains(user, StringComparison.Ordinal) ? $"密码 {password.Length} 字，包含用户名"
+            : $"密码 {password.Length} 字，与用户名不同";
+        return u + "；" + p;
+    }
+
     internal string Report()
     {
         string what = Kind == WorkspaceKind.Sftp ? "文件会话" : "终端会话";
@@ -605,6 +624,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             "Forterm Studio " + StudioPaths.Version + " 连接诊断",
             "系统：" + RuntimeInformation.OSDescription.Trim() + " " + RuntimeInformation.ProcessArchitecture,
             "打开方式：" + (profile == null ? "控制器唤醒" : profile.JumpChain.Count > 0 ? $"已保存连接，经 {profile.JumpChain.Count} 级跳板" : "已保存连接") + "，" + what,
+            .. (launchShape.Length > 0 ? new[] { "唤醒参数：" + launchShape } : []),
         ];
         return trace!.Report(head, [Host, User, Title, keyPath]);
     }
