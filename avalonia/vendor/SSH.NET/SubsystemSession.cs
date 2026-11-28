@@ -30,7 +30,17 @@ namespace Renci.SshNet
         private EventWaitHandle _errorOccurredWaitHandle = new ManualResetEvent(initialState: false);
         private EventWaitHandle _sessionDisconnectedWaitHandle = new ManualResetEvent(initialState: false);
         private EventWaitHandle _channelClosedWaitHandle = new ManualResetEvent(initialState: false);
+        // Forterm: the subsystem ended (end of data, exit-status) without its channel being closed. A bastion that could
+        // not log into the target did so and kept the channel open: every wait ran into the timeout, and what it wrote was
+        // lost. Waits now fail at once, with the exit status and what the server wrote besides the subsystem's own data.
+        private EventWaitHandle _channelEndedWaitHandle = new ManualResetEvent(initialState: false);
+        private readonly System.IO.MemoryStream _errorOutput = new System.IO.MemoryStream();
+        private uint? _exitStatus;
+        private volatile bool _endSeen;
         private bool _isDisposed;
+
+        /// <summary>Forterm: <see cref="ConnectionInfo.SubsystemEndsWaits"/> of this connection, as it was at connect.</summary>
+        protected bool EndsWaits { get; private set; }
 
         /// <inheritdoc/>
         public int OperationTimeout { get; set; }
@@ -118,6 +128,15 @@ namespace Renci.SshNet
             _ = _sessionDisconnectedWaitHandle.Reset();
             _ = _sessionDisconnectedWaitHandle.Reset();
             _ = _channelClosedWaitHandle.Reset();
+            _ = _channelEndedWaitHandle.Reset();
+            _exitStatus = null;
+            _endSeen = false;
+            lock (_errorOutput)
+            {
+                _errorOutput.SetLength(0);
+            }
+
+            EndsWaits = _session.ConnectionInfo is ConnectionInfo { SubsystemEndsWaits: true };
 
             _session.ErrorOccured += Session_ErrorOccurred;
             _session.Disconnected += Session_Disconnected;
@@ -126,6 +145,16 @@ namespace Renci.SshNet
             _channel.DataReceived += Channel_DataReceived;
             _channel.Exception += Channel_Exception;
             _channel.Closed += Channel_Closed;
+            if (EndsWaits)
+            {
+                _channel.ExtendedDataReceived += Channel_ExtendedDataReceived;
+                _channel.RequestReceived += Channel_RequestReceived;
+                if (_channel is Renci.SshNet.Channels.Channel ending)
+                {
+                    ending.EndOfData += Channel_EndOfData;
+                }
+            }
+
             _channel.Open();
 
             if (!_channel.SendSubsystemRequest(_subsystemName))
@@ -156,6 +185,13 @@ namespace Renci.SshNet
                 channel.DataReceived -= Channel_DataReceived;
                 channel.Exception -= Channel_Exception;
                 channel.Closed -= Channel_Closed;
+                channel.ExtendedDataReceived -= Channel_ExtendedDataReceived;
+                channel.RequestReceived -= Channel_RequestReceived;
+                if (channel is Renci.SshNet.Channels.Channel ending)
+                {
+                    ending.EndOfData -= Channel_EndOfData;
+                }
+
                 channel.Dispose();
             }
         }
@@ -231,6 +267,65 @@ namespace Renci.SshNet
             _ = _channelClosedWaitHandle?.Set();
         }
 
+        private void Channel_ExtendedDataReceived(object sender, ChannelExtendedDataEventArgs e)
+        {
+            lock (_errorOutput)
+            {
+                var room = 2048 - (int)_errorOutput.Length;
+                if (room > 0)
+                {
+                    _errorOutput.Write(e.Data.Array, e.Data.Offset, Math.Min(room, e.Data.Count));
+                }
+            }
+        }
+
+        private void Channel_RequestReceived(object sender, ChannelRequestEventArgs e)
+        {
+            if (e.Info is Renci.SshNet.Messages.Connection.ExitStatusRequestInfo exit)
+            {
+                _exitStatus = exit.ExitStatus;
+                Exited();
+            }
+            else if (e.Info is Renci.SshNet.Messages.Connection.ExitSignalRequestInfo)
+            {
+                Exited();
+            }
+        }
+
+        // The exit status often comes before the server has passed on what the subsystem wrote to stderr (OpenSSH sends
+        // it first): the wait ends a moment later, or at the end of data, which nothing follows.
+        private void Exited()
+        {
+            _endSeen = true;
+            var ended = _channelEndedWaitHandle;
+            _ = Task.Delay(400).ContinueWith(delay => { try { ended?.Set(); } catch (ObjectDisposedException) { } }, TaskScheduler.Default);
+        }
+
+        private void Channel_EndOfData(object sender, ChannelEventArgs e)
+        {
+            _endSeen = true;
+            _ = _channelEndedWaitHandle?.Set();
+        }
+
+        /// <summary>
+        /// Forterm: what the server sent on the channel that is not the subsystem's own data (SFTP: what came before its
+        /// version and was no version), at most 2 KiB.
+        /// </summary>
+        protected virtual byte[] OtherOutput() => Array.Empty<byte>();
+
+        private SshSubsystemEndedException Ended()
+        {
+            byte[] said;
+            lock (_errorOutput)
+            {
+                said = _errorOutput.ToArray();
+            }
+
+            var other = OtherOutput();
+            var text = System.Text.Encoding.UTF8.GetString(other).Trim() + (other.Length > 0 && said.Length > 0 ? "\n" : string.Empty) + System.Text.Encoding.UTF8.GetString(said).Trim();
+            return new SshSubsystemEndedException(_subsystemName, _exitStatus, text.Trim());
+        }
+
         /// <summary>
         /// Waits a specified time for a given <see cref="WaitHandle"/> to get signaled.
         /// </summary>
@@ -246,7 +341,8 @@ namespace Renci.SshNet
                     _errorOccurredWaitHandle,
                     _sessionDisconnectedWaitHandle,
                     _channelClosedWaitHandle,
-                    waitHandle
+                    waitHandle,
+                    _channelEndedWaitHandle
                 };
 
             var result = WaitHandle.WaitAny(waitHandles, millisecondsTimeout);
@@ -258,9 +354,12 @@ namespace Renci.SshNet
                 case 1:
                     throw new SshException("Connection was closed by the server.");
                 case 2:
-                    throw new SshException("Channel was closed.");
+                    // Closed right after it ended (stderr, exit status, end of data, close): the end is what is said.
+                    throw _endSeen ? Ended() : new SshException("Channel was closed.");
                 case 3:
                     break;
+                case 4:
+                    throw Ended();
                 case WaitHandle.WaitTimeout:
                     throw new SshOperationTimeoutException("Operation has timed out.");
                 default:
@@ -300,7 +399,12 @@ namespace Renci.SshNet
 
                 using RegisteredWait channelClosedReg = new(
                     _channelClosedWaitHandle,
-                    static (tcs, _) => ((TaskCompletionSource<T>)tcs).TrySetException(new SshException("Channel was closed.")),
+                    (state, _) => ((TaskCompletionSource<T>)state).TrySetException(_endSeen ? Ended() : new SshException("Channel was closed.")),
+                    state: tcs);
+
+                using RegisteredWait channelEndedReg = new(
+                    _channelEndedWaitHandle,
+                    (state, _) => ((TaskCompletionSource<T>)state).TrySetException(Ended()),
                     state: tcs);
 
                 using var timeoutCts = new CancellationTokenSource(millisecondsTimeout);
@@ -358,7 +462,9 @@ namespace Renci.SshNet
                 case 1:
                     throw new SshException("Connection was closed by the server.");
                 case 2:
-                    throw new SshException("Channel was closed.");
+                    throw _endSeen ? Ended() : new SshException("Channel was closed.");
+                case 5:
+                    throw Ended();
                 case WaitHandle.WaitTimeout:
                     throw new SshOperationTimeoutException("Operation has timed out.");
                 default:
@@ -375,7 +481,8 @@ namespace Renci.SshNet
                     _sessionDisconnectedWaitHandle,
                     _channelClosedWaitHandle,
                     waitHandle1,
-                    waitHandle2
+                    waitHandle2,
+                    _channelEndedWaitHandle
                 };
         }
 
@@ -467,8 +574,35 @@ namespace Renci.SshNet
                     channelClosedWaitHandle.Dispose();
                 }
 
+                var channelEndedWaitHandle = _channelEndedWaitHandle;
+                if (channelEndedWaitHandle != null)
+                {
+                    _channelEndedWaitHandle = null;
+                    channelEndedWaitHandle.Dispose();
+                }
+
                 _isDisposed = true;
             }
         }
+    }
+
+    /// <summary>
+    /// Forterm: the server ended a subsystem (end of data, exit status) while it was waited for, without closing its channel.
+    /// </summary>
+    public sealed class SshSubsystemEndedException : SshException
+    {
+        internal SshSubsystemEndedException(string subsystem, uint? exitStatus, string serverText)
+            : base(string.Format(CultureInfo.InvariantCulture, "The server ended the '{0}' subsystem{1}.", subsystem, exitStatus is { } code ? " (exit status " + code.ToString(CultureInfo.InvariantCulture) + ")" : string.Empty))
+        {
+            ExitStatus = exitStatus;
+            ServerText = serverText;
+        }
+
+        /// <summary>Gets the exit status the server sent, if it sent one.</summary>
+        public uint? ExitStatus { get; }
+
+        /// <summary>Gets what the server wrote on the channel besides the subsystem's own data (at most 2 KiB each of its
+        /// error output and of what was not the subsystem's), as UTF-8; text of the server, to be cleaned before it is shown.</summary>
+        public string ServerText { get; }
     }
 }

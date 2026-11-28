@@ -34,6 +34,7 @@ public sealed partial class SharedSshSession : IDisposable
         if (answers != null) info.Answering = () => answers.IsAnswering;
         SshAlgorithms.Apply(info, options);
         if (options.CommonChannels) { info.RetryAttempts = 1; info.ChannelPacketSize = 32 * 1024; }
+        info.SubsystemEndsWaits = options.SubsystemEndsWaits;
         if (options.Trace != null) info.LoggerFactory = options.Trace;
         var client = new SshClient(info) { KeepAliveInterval = Timeout.InfiniteTimeSpan };
         string? trustedFingerprint = null;
@@ -314,8 +315,10 @@ public sealed class SftpLease : IRemoteFileSource
     public WorkspaceProtocol Protocol => WorkspaceProtocol.Sftp;
     public SftpClient Client { get; }
     readonly IDisposable lease; readonly CancellationTokenRegistration ownerClosed;
+    /// <summary>See <see cref="SessionConnectOptions.PathStampWhenHandleFails"/>.</summary>
+    public bool PathStampWhenHandleFails { get; }
     public SftpLease(SftpClient client, IDisposable lease, SessionConnectOptions? options = null, CancellationToken transportClosed = default, SharedSshSession? owner = null)
-    { Owner = owner; Client = client; this.lease = lease; ownerClosed = transportClosed.Register(() => ThreadPool.QueueUserWorkItem(_ => { try { Dispose(); } catch { } })); if (options is { KeepAliveEnabled: true, SftpProbeEnabled: true }) _ = Heartbeat(options); }
+    { Owner = owner; Client = client; PathStampWhenHandleFails = options?.PathStampWhenHandleFails == true; this.lease = lease; ownerClosed = transportClosed.Register(() => ThreadPool.QueueUserWorkItem(_ => { try { Dispose(); } catch { } })); if (options is { KeepAliveEnabled: true, SftpProbeEnabled: true }) _ = Heartbeat(options); }
     async Task Heartbeat(SessionConnectOptions options)
     {
         try { using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.KeepAliveSeconds)); while (await timer.WaitForNextTickAsync(Closed)) { using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Closed); timeout.CancelAfter(TimeSpan.FromSeconds(8)); string? directory; lock (directoryGate) directory = probeDirectory; if (directory == null && HasWorkingDirectory) directory = Client.WorkingDirectory; if (string.IsNullOrEmpty(directory)) continue; await Client.LStatRawAsync(directory, timeout.Token).WaitAsync(timeout.Token); } }

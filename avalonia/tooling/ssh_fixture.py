@@ -285,11 +285,29 @@ class FixtureSFTPServer(paramiko.SFTPServer):
    self.sock.close();return
   # FIXTURE_MKDIR_HANGUP=1: the file channel ends at "新建目录", without an answer (as a server that cannot take it).
   if kind==CMD_MKDIR and os.getenv('FIXTURE_MKDIR_HANGUP')=='1':self.sock.close();return
+  # FIXTURE_NO_FSTAT=1: attributes by handle (FSTAT, FSETSTAT) fail with the plain "failure" a bastion's SFTP gave.
+  from paramiko.sftp import CMD_FSTAT,CMD_FSETSTAT
+  if kind in (CMD_FSTAT,CMD_FSETSTAT) and os.getenv('FIXTURE_NO_FSTAT')=='1':
+   with lock:counts['handleStats']=counts.get('handleStats',0)+1
+   self._send_status(request,paramiko.SFTP_FAILURE,'failure');return
   if kind==CMD_REALPATH and (os.getenv('FIXTURE_DENY_REALPATH')=='1' or os.getenv('FIXTURE_UNSUPPORTED_REALPATH')=='1'):
    code=paramiko.SFTP_PERMISSION_DENIED if os.getenv('FIXTURE_DENY_REALPATH')=='1' else paramiko.SFTP_OP_UNSUPPORTED
    self._send_status(request,code);return
   return super()._process(kind,request,msg)
  def _send_server_version(self):
+  # FIXTURE_SFTP_ENDS=<text>: the file channel is taken, then the server writes <text> to stderr, sends exit-status 1 and
+  # EOF, and leaves the channel open (as a bastion that could not log into the target did). FIXTURE_SFTP_ENDS_WITH=eof
+  # or exit sends only that one of the two; exit-first sends the exit status before the text (as OpenSSH does); close
+  # closes the channel right after; exit-close sends the exit status and closes, without EOF.
+  if os.getenv('FIXTURE_SFTP_ENDS'):
+   self._read_packet();how=os.getenv('FIXTURE_SFTP_ENDS_WITH','both');text=os.getenv('FIXTURE_SFTP_ENDS').encode('utf-8')
+   if how=='exit-first':self.sock.send_exit_status(1);time.sleep(0.1)
+   self.sock.send_stderr(text)
+   if how in ('both','exit','close','exit-close'):self.sock.send_exit_status(1)
+   if how in ('both','eof','exit-first','close'):self.sock.shutdown_write()
+   if how in ('close','exit-close'):self.sock.close();raise EOFError('ended')
+   while self.sock.recv(1):pass
+   raise EOFError('ended')
   # FIXTURE_SFTP_SILENT=1: the file channel opens but never answers (as a bastion's terminal route was seen to do).
   if os.getenv('FIXTURE_SFTP_SILENT')=='1':
    self._read_packet()

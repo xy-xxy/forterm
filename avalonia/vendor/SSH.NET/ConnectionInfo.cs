@@ -523,5 +523,10 @@ namespace Renci.SshNet
         // Forterm: while this says true, the user is answering a question of this connection (its host key, a login
         // prompt): that time does not count towards Timeout. The server's own limit still applies.
         public Func<bool>? Answering { get; set; }
+
+        // Forterm: a subsystem (SFTP) whose server sends end of data or an exit status while something waits fails that
+        // wait at once (SshSubsystemEndedException, with what the server wrote), instead of when the wait times out.
+        // Off: as the library does.
+        public bool SubsystemEndsWaits { get; set; }
     }
 }

@@ -91,7 +91,7 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
         this.interaction = interaction;
         this.knownHosts = knownHosts;
         if (kind is WorkspaceKind.Terminal or WorkspaceKind.Sftp) trace = new SshTrace();
-        this.options = (options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels }) with { CommonChannels = true, AnswersUntimed = true, Trace = trace };
+        this.options = (options ?? new SessionConnectOptions { MaxChannels = ProfileConnector.MaxChannels }) with { CommonChannels = true, AnswersUntimed = true, SubsystemEndsWaits = true, PathStampWhenHandleFails = true, Trace = trace };
         this.settings = settings ?? new SessionSettings();
         this.profile = profile;
         this.connector = connector;
@@ -831,7 +831,11 @@ public sealed partial class WorkspaceViewModel : TabViewModel, IDisposable
             await LoadTreeAsync(StartPath(sftp.HasWorkingDirectory ? sftp.Client.WorkingDirectory : "/"), ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception e) { if (!transportEnded) FileMessage = "文件通道不可用：" + Short(SshErrors.Explain(e), MostReason); }
+        catch (Exception e)
+        {
+            // A server that ended the channel may have said why (a bastion that could not log into the target): shown here.
+            if (!transportEnded) FileMessage = "文件通道不可用：" + Short(SshErrors.Explain(e), MostReason) + (SshErrors.Said(e) is { Length: > 0 } said ? "。服务器说：" + said : "");
+        }
     }
 
     void UseFileSource(IRemoteFileSource source, DirectoryLister given)

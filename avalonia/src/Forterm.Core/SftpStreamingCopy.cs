@@ -9,14 +9,14 @@ public sealed partial class SafeTransfers
         await CheckRemote(directory, expected, ct); var stream = await Metadata(t => directory.Source.Client.OpenRawAsync(expected.Path, FileMode.Open, FileAccess.Read, t), ct);
         try
         {
-            if (RemoteStamp.From(await Metadata(t => stream.ReadHandleAttributesAsync(t), ct)) != expected.Stamp) throw new IOException("流式源句柄与已选版本不一致");
+            if (!await Is(stream, expected.Path, directory.Source, expected.Stamp, ct)) throw new IOException("流式源句柄与已选版本不一致");
             return new CopyReadStream(stream, expected.Stamp.Length, async complete =>
             {
                 try
                 {
                     if (!complete) return;
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(directory.Source.Closed); timeout.CancelAfter(options.MetadataTimeout);
-                    if (RemoteStamp.From(await stream.ReadHandleAttributesAsync(timeout.Token)) != expected.Stamp) throw new IOException("源句柄在复制期间发生变化");
+                    if (!await Is(stream, expected.Path, directory.Source, expected.Stamp, timeout.Token)) throw new IOException("源句柄在复制期间发生变化");
                 }
                 finally { await stream.DisposeAsync(); }
             });

@@ -379,6 +379,10 @@ public static class SshErrors
         return null;
     }
 
+    /// <summary>What the server itself wrote about an error (a subsystem it ended), cleaned of control and format
+    /// characters and bounded; "" when nothing. Its text: to be shown where it is seen, never put into a report.</summary>
+    public static string Said(Exception error) => error is Renci.SshNet.SshSubsystemEndedException { ServerText.Length: > 0 } ended ? SshTrace.Plain(ended.ServerText, 300) : "";
+
     public static string Explain(Exception error) => error switch
     {
         ObjectDisposedException => "连接已断开",
@@ -399,6 +403,10 @@ public static class SshErrors
         SshException e when e.Message.StartsWith("The pseudo-terminal request was not accepted", StringComparison.Ordinal) => "服务器不允许分配终端",
         SshException e when e.Message.StartsWith("The request to start a shell was not accepted", StringComparison.Ordinal) => "服务器不允许启动终端",
         SshException e when e.Message.StartsWith("Subsystem 'sftp' could not be executed", StringComparison.Ordinal) => "服务器不提供 SFTP 服务",
+        SshException { Message: "Channel was closed." } => "服务器关闭了这条通道",
+        // What the server wrote is not put here (this goes into reports); the caller may show it, cleaned, where it is seen.
+        Renci.SshNet.SshSubsystemEndedException ended => "服务器结束了" + (ended.Message.Contains("'sftp'", StringComparison.Ordinal) ? "文件通道（SFTP）" : "这条通道")
+            + (ended.ExitStatus is { } code ? $"（退出码 {code}）" : "") + "，没有回应；可能是它没能登录目标主机（例如账号或密码不对），或不允许这样访问",
         _ => error.Message,
     };
 

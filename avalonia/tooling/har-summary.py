@@ -36,8 +36,15 @@ def kind(value):
     if '://' in s: return '网址(' + url_shape(s) + ')'
     return f'文本({len(s)})'
 
+# The portal's own product numbers and names (protocols, client tools): constants of the vendor, nobody's data. Only
+# under these field names of the fort portal, and only when they are digits, ASCII words, spaces and the ":" and "|" of
+# its lists: no dots or dashes, so that no address, host name or id of an installation can pass.
+VENDOR = re.compile(r'^(?:fortProtocolClient|fortOperationsProtocol|fortOperationsProtocolId|fortOperationsProtocolName|fortClientToolId|fortResourceTypeId)$')
+VENDOR_VALUE = re.compile(r'^[0-9A-Za-z:| ]{1,400}$')
+
 def text_value(key, value):
     """Short lower-case words under harmless keys (protocol: ssh, status: ok) stay; everything else is its kind."""
+    if isinstance(value, str) and VENDOR.match(str(key or '').split('.')[-1]) and VENDOR_VALUE.match(value): return value
     if isinstance(value, str) and ENUMISH.match(value) and not SENSITIVE.search(key or ''): return value
     if isinstance(value, bool) or value is None: return kind(value)
     if isinstance(value, (int, float)) and not SENSITIVE.search(key or '') and abs(value) < 1000 and float(value).is_integer(): return str(int(value))

@@ -28,6 +28,14 @@ public sealed record SessionConnectOptions
     /// count towards the timeouts: neither the library's per-request one nor the overall authentication window. The
     /// server's own limit for a login still applies. Off: as before, the answer must come within those limits.</summary>
     public bool AnswersUntimed { get; init; }
+    /// <summary>A subsystem (SFTP) the server ends while something waits (end of data, exit status: a bastion that could
+    /// not log into the target) fails that wait at once, with what the server wrote (<c>SshSubsystemEndedException</c>,
+    /// <see cref="SshErrors.Said"/>). Off: as before, the wait runs into its timeout.</summary>
+    public bool SubsystemEndsWaits { get; init; }
+    /// <summary>A server that cannot give the attributes of an open file (FSTAT; a bastion's SFTP answered "failure"):
+    /// uploads, saves and reads are checked by their path instead (see <see cref="SftpLease.PathStampWhenHandleFails"/>);
+    /// replacing a file, which needs its owner and mode by handle, is refused with a reason. Off: as before.</summary>
+    public bool PathStampWhenHandleFails { get; init; }
     /// <summary>Notes which messages are exchanged with the server (see <see cref="SshTrace"/>).</summary>
     public SshTrace? Trace { get; init; }
     public void Validate()

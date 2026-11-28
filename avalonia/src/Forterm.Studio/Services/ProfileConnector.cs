@@ -46,6 +46,9 @@ public sealed class ProfileConnector(LibraryStore library, CredentialStore crede
         CommonChannels = true,
         // A question may wait for the lock screen to be unlocked: only the server's own limit applies.
         AnswersUntimed = true,
+        // A bastion's SFTP: ends a channel without closing it, and answers "failure" for the attributes of an open file.
+        SubsystemEndsWaits = true,
+        PathStampWhenHandleFails = true,
         KeepAliveEnabled = p.HeartbeatMs > 0,
         KeepAliveSeconds = p.HeartbeatMs > 0 ? Math.Clamp(p.HeartbeatMs / 1000, 5, 600) : 15,
         ConnectTimeoutSeconds = p.TimeoutMs > 0 ? Math.Clamp(p.TimeoutMs / 1000, 5, 300) : 45,

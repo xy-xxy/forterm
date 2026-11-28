@@ -26,11 +26,11 @@ public sealed partial class SafeTransfers
         var stamp = await Stat(d.Source, path, token);
         if (stamp is not { Regular: true, Link: false, Length: >= 0 and <= RemoteText.MaxBytes }) throw new IOException("在线编辑只支持不超过1MiB的普通文件；不跟随符号链接");
         await using var input = await Metadata(t => d.Source.Client.OpenRawAsync(path, FileMode.Open, FileAccess.Read, t), token);
-        if (RemoteStamp.From(await Metadata(t => input.ReadHandleAttributesAsync(t), token)) != stamp) throw new IOException("文件在打开时发生变化");
+        if (!await Is(input, path, d.Source, stamp, token)) throw new IOException("文件在打开时发生变化");
         using var output = new MemoryStream(); byte[] block = new byte[32768];
         while (true) { int n = await input.ReadAsync(block, token); if (n == 0) break; if (output.Length + n > RemoteText.MaxBytes) throw new IOException("文件读取时超过1MiB边界"); await output.WriteAsync(block.AsMemory(0, n), token); }
         byte[] bytes = output.ToArray();
-        if (bytes.LongLength != stamp.Length || RemoteStamp.From(await Metadata(t => input.ReadHandleAttributesAsync(t), token)) != stamp || await Stat(d.Source, path, token) != stamp) throw new IOException("文件在读取期间发生变化");
+        if (bytes.LongLength != stamp.Length || !await Is(input, path, d.Source, stamp, token) || await Stat(d.Source, path, token) != stamp) throw new IOException("文件在读取期间发生变化");
         await CheckDirectory(d, token);
         string hash = Convert.ToHexString(SHA256.HashData(bytes));
         // Second full bounded read detects same-size/same-mtime edits during the first read.

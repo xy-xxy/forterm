@@ -27,6 +27,10 @@ namespace Renci.SshNet.Sftp
         private readonly Encoding _encoding;
         private ArrayBuffer _buffer = new(32 * 1024);
         private EventWaitHandle _sftpVersionConfirmed = new AutoResetEvent(initialState: false);
+        // Forterm: what came before the version while there was none (at most 2 KiB): a server that writes a message
+        // instead of speaking SFTP is said, not waited for (see SubsystemSession.OtherOutput).
+        private readonly System.IO.MemoryStream _beforeVersion = new System.IO.MemoryStream();
+        private volatile bool _versionSeen;
         private IDictionary<string, string> _supportedExtensions;
         public bool SupportsExtension(string name) => _supportedExtensions?.ContainsKey(name) == true;
 
@@ -243,6 +247,12 @@ namespace Renci.SshNet.Sftp
 
         protected override void OnChannelOpen()
         {
+            _versionSeen = false;
+            lock (_beforeVersion)
+            {
+                _beforeVersion.SetLength(0);
+            }
+
             SendMessage(new SftpInitRequest(MaximumSupportedVersion));
 
             WaitOnHandle(_sftpVersionConfirmed, OperationTimeout);
@@ -261,8 +271,39 @@ namespace Renci.SshNet.Sftp
             }
         }
 
+        protected override byte[] OtherOutput()
+        {
+            lock (_beforeVersion)
+            {
+                return _versionSeen ? Array.Empty<byte>() : _beforeVersion.ToArray();
+            }
+        }
+
         protected override void OnDataReceived(ArraySegment<byte> data)
         {
+            if (!_versionSeen && EndsWaits)
+            {
+                lock (_beforeVersion)
+                {
+                    var room = 2048 - (int)_beforeVersion.Length;
+                    if (room > 0)
+                    {
+                        _beforeVersion.Write(data.Array, data.Offset, Math.Min(room, data.Count));
+                    }
+
+                    // Text where the version belongs: no SFTP packet is that long or that short. Kept, not parsed.
+                    if (_beforeVersion.Length >= 4)
+                    {
+                        var first = _beforeVersion.GetBuffer();
+                        var length = BinaryPrimitives.ReadInt32BigEndian(first);
+                        if (length is < 5 or > 256 * 1024 || _beforeVersion.Length > 4 && first[4] != 2)
+                        {
+                            return;
+                        }
+                    }
+                }
+            }
+
             // If the buffer is empty then skip a copy and read packets
             // directly out of the given data.
             if (_buffer.ActiveLength == 0)
@@ -339,6 +380,7 @@ namespace Renci.SshNet.Sftp
                 {
                     ProtocolVersion = versionResponse.Version;
                     _supportedExtensions = versionResponse.Extensions;
+                    _versionSeen = true;
 
                     _ = _sftpVersionConfirmed.Set();
                 }

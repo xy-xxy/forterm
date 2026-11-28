@@ -11,14 +11,14 @@ public sealed partial class SafeTransfers
         await CheckRemote(directory, expected, token); using var output = new MemoryStream();
         await using (var input = await Metadata(t => directory.Source.Client.OpenRawAsync(expected.Path, FileMode.Open, FileAccess.Read, t), token))
         {
-            if (RemoteStamp.From(await Metadata(t => input.ReadHandleAttributesAsync(t), token)) != expected.Stamp) throw new IOException("打开的源版本不一致");
+            if (!await Is(input, expected.Path, directory.Source, expected.Stamp, token)) throw new IOException("打开的源版本不一致");
             byte[] block = new byte[32768];
             while (true)
             {
                 using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(options.IdleTimeout); int n = await input.ReadAsync(block, idle.Token); if (n == 0) break;
                 if (output.Length + n > maxBytes || output.Length + n > expected.Stamp.Length) throw new IOException("源内容在读取时超过边界"); await output.WriteAsync(block.AsMemory(0, n), token);
             }
-            if (RemoteStamp.From(await Metadata(t => input.ReadHandleAttributesAsync(t), token)) != expected.Stamp) throw new IOException("源文件读取时属性变化");
+            if (!await Is(input, expected.Path, directory.Source, expected.Stamp, token)) throw new IOException("源文件读取时属性变化");
         }
         byte[] bytes = output.ToArray();
         if (bytes.LongLength != expected.Stamp.Length || Convert.ToHexString(SHA256.HashData(bytes)) != expected.Hash) throw new IOException("源内容在读取时变化");

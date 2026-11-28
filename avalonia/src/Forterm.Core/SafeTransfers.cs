@@ -31,6 +31,13 @@ public sealed partial class SafeTransfers(TransferPolicy? policy = null)
         var pieces = path.Split('/', StringSplitOptions.RemoveEmptyEntries); if (pieces.Contains("..")) throw new IOException("请使用明确的绝对目录，不接受父跳转路径"); return "/" + string.Join('/', pieces.Where(s => s != "."));
     }
     static string Name(string name) { if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0', '\r', '\n']) >= 0 || System.Text.Encoding.UTF8.GetByteCount(name) > 1024) throw new IOException("文件名无效"); return name; }
+    /// <summary>The open file is the version expected: by its handle, or (<see cref="SftpLease.PathStampWhenHandleFails"/>, a
+    /// server that cannot say what an open file is) by its path.</summary>
+    async Task<bool> Is(SftpFileStream open, string path, SftpLease source, RemoteStamp? expected, CancellationToken token)
+    {
+        try { return RemoteStamp.From(await Metadata(t => open.ReadHandleAttributesAsync(t), token)) == expected; }
+        catch (SftpException e) when (source.PathStampWhenHandleFails && e is not SftpPathNotFoundException) { return await Stat(source, path, token) == expected; }
+    }
     async Task<RemoteStamp?> Stat(SftpLease source, string path, CancellationToken ct)
     { try { return RemoteStamp.From(await Metadata(t => source.Client.LStatRawAsync(path, t), ct)); } catch (SftpPathNotFoundException) { return null; } }
     async Task<RemoteStamp> Directory(SftpLease source, string path, CancellationToken ct)
@@ -104,6 +111,7 @@ public sealed partial class SafeTransfers(TransferPolicy? policy = null)
 
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, d.Source.Closed); lifetime.CancelAfter(options.OverallTimeout); var token = lifetime.Token;
         string temp = d.Path.TrimEnd('/') + "/.forterm-upload-" + Guid.NewGuid().ToString("N"); bool created = false, committing = false; SftpFileStream? staging = null;
+        bool byPath = d.Source.PathStampWhenHandleFails; RemoteStamp? pathCreated = null;
         try
         {
             await checkInput(token); await CheckRemote(d, target, token);
@@ -113,11 +121,39 @@ public sealed partial class SafeTransfers(TransferPolicy? policy = null)
             await using (var input = await openInput(token))
             {
                 staging = await Metadata(t => d.Source.Client.OpenRawAsync(temp, FileMode.CreateNew, FileAccess.Write, t), token);
-                created = true; copied = await Copy(input, staging, length, progress, token);
+                created = true;
+                // The owner, group and mode the temporary file got: what is checked and committed must still have them.
+                if (byPath) pathCreated = await Stat(d.Source, temp, token);
+                copied = await Copy(input, staging, length, progress, token);
             }
             progress.Report(new(copied.Bytes, length, "校验内容"));
+            // The path as it is before its content is read back: what is committed is what was checked (when the server
+            // cannot say what an open file is, PathStampWhenHandleFails).
+            var pathChecked = byPath ? await Stat(d.Source, temp, token) : null;
+            if (byPath && (pathCreated == null || pathChecked == null || pathChecked.User != pathCreated.User || pathChecked.Group != pathCreated.Group || pathChecked.Mode != pathCreated.Mode))
+                throw new IOException("临时上传路径已被替换，未提交");
             if (copied.Hash != hash || await HashRemote(d.Source, temp, token, length) != copied.Hash) throw new IOException("上传内容校验失败，未提交目标");
-            if (target.Stamp != null)
+            if (target.Stamp != null && byPath)
+            {
+                // The same as below, by the path where the server cannot do it by the open file: the old owner and group, and
+                // its mode, set by the open file where the server can and by the path where it cannot, read back by the path.
+                if (pathChecked!.User != target.Stamp.User || pathChecked.Group != target.Stamp.Group) throw new IOException("无法保留旧目标的所有者或组，未提交覆盖");
+                short mode = short.Parse(Convert.ToString((int)target.Stamp.Mode, 8), System.Globalization.CultureInfo.InvariantCulture);
+                try
+                {
+                    try { await Metadata(async t => { await staging!.SetHandlePermissionsAsync(mode, t); return true; }, token); }
+                    catch (SftpException e) when (e is not SftpPathNotFoundException) { await Metadata(t => Task.Run(() => { d.Source.Client.ChangePermissions(temp, mode); return true; }, t), token); }
+                }
+                catch (TimeoutException) { d.Source.Dispose(); throw; }
+                catch (OperationCanceledException) { d.Source.Dispose(); throw; }
+                catch (SftpException e) when (e is not SftpPathNotFoundException) { throw new IOException("服务器不能设置临时文件的权限（" + e.Message + "），不能保证覆盖后保留原文件的权限，未覆盖", e); }
+                var modeSet = await Stat(d.Source, temp, token);
+                if (modeSet == null || modeSet.Mode != target.Stamp.Mode) throw new IOException("服务器未保留目标权限，未提交覆盖");
+                // Nothing but the mode changed since the content was checked.
+                if (modeSet with { Mode = pathChecked.Mode } != pathChecked) throw new IOException("临时上传路径已被替换，未提交");
+                pathChecked = modeSet; pathCreated = modeSet;
+            }
+            else if (target.Stamp != null)
             {
                 var temporaryStamp = RemoteStamp.From(await Metadata(t => staging!.ReadHandleAttributesAsync(t), token));
                 if (temporaryStamp == null || temporaryStamp.User != target.Stamp.User || temporaryStamp.Group != target.Stamp.Group) throw new IOException("无法保留旧目标的所有者或组，未提交覆盖");
@@ -126,8 +162,13 @@ public sealed partial class SafeTransfers(TransferPolicy? policy = null)
                 catch (OperationCanceledException) { d.Source.Dispose(); throw; }
                 if ((await Metadata(t => staging!.ReadHandleAttributesAsync(t), token)).PermissionBits != target.Stamp.Mode) throw new IOException("服务器未保留目标权限，未提交覆盖");
             }
-            var handleVersion = RemoteStamp.From(await Metadata(t => staging!.ReadHandleAttributesAsync(t), token));
-            if (handleVersion != await Stat(d.Source, temp, token)) throw new IOException("临时上传路径已被替换，未提交");
+            RemoteStamp? handleVersion;
+            try { handleVersion = RemoteStamp.From(await Metadata(t => staging!.ReadHandleAttributesAsync(t), token)); }
+            catch (SftpException) when (pathChecked != null) { handleVersion = null; }
+            var pathNow = await Stat(d.Source, temp, token);
+            if (handleVersion != null ? handleVersion != pathNow
+                : pathNow != pathChecked || pathNow is not { Regular: true, Link: false } || pathNow.Length != copied.Bytes)
+                throw new IOException("临时上传路径已被替换，未提交");
             await checkInput(token); await CheckRemote(d, target, token); token.ThrowIfCancellationRequested(); Available(d);
             await staging!.DisposeAsync(); staging = null;
             progress.Report(new(copied.Bytes, length, "提交中")); committing = true;
